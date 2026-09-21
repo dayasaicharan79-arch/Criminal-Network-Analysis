@@ -1,0 +1,10 @@
+[RESTRICTED // FIELD SURVEILLANCE REPORT]
+NOTICE: SYNTHETIC / DEMONSTRATION DATA FOR ANALYTICS TESTING
+OPERATION: OPERATION VORTEX
+DATE: 2024-03-15
+
+2024-03-15T10:30:00Z - Target Tariq Mansoor established encrypted voice contact with +919811044219.
+2024-03-15T10:32:00Z - Intercepted Hardware IMEI: 864209040112340 connected through Bandra Kurla cell tower.
+2024-03-15T11:45:00Z - Relay detected to Hawaladar Karan Verma (+919820155182).
+2024-03-15T14:10:00Z - Vehicle registration DL01AB1234 spotted near Terminal 3 checkpoint.
+2024-03-15T16:05:00Z - Handover confirmed at Safehouse Site: Sector 62, Noida. Coordinates: 28.6270, 77.3620.

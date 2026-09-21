@@ -42,11 +42,14 @@ export const useInvestigationStore = create((set, get) => ({
   error: null,
   cinemaPlaying: false,
   cinemaStep: 0,
+  isReportModalOpen: false,
 
   // ---------------------------------------------------------------------------
   // Setters & Simple Actions
   // ---------------------------------------------------------------------------
   setActiveView: (view) => set({ activeView: view }),
+  openReportModal: () => set({ isReportModalOpen: true }),
+  closeReportModal: () => set({ isReportModalOpen: false }),
 
   setFilterMinConfidence: (val) => {
     set({ filterMinConfidence: val });
@@ -216,6 +219,44 @@ export const useInvestigationStore = create((set, get) => ({
       set({ graphData: res.data || { nodes: [], links: [] } });
     } catch (err) {
       console.error('Failed to reload filtered graph:', err);
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Targeted Data Invalidation & Multi-View Synchronization
+  // ---------------------------------------------------------------------------
+  refreshInvestigationData: async () => {
+    const { activeCaseId, filterMinConfidence, filterEntityTypes, selectedEntityId } = get();
+    try {
+      const [casesRes, activeCaseRes, graphRes, geoRes, timelineRes, evidenceRes, analyticsRes] = await Promise.all([
+        api.getCases(),
+        api.getCaseById(activeCaseId),
+        api.getGraph({
+          caseId: activeCaseId,
+          minConfidence: filterMinConfidence,
+          typeFilter: filterEntityTypes.length > 0 ? filterEntityTypes.join(',') : undefined,
+        }),
+        api.getGeoData({ caseId: activeCaseId }),
+        api.getTimeline({ caseId: activeCaseId }),
+        api.getEvidence({ caseId: activeCaseId }),
+        api.getAnalytics(activeCaseId),
+      ]);
+
+      set({
+        cases: casesRes.data || [],
+        activeCase: activeCaseRes.data || null,
+        graphData: graphRes.data || { nodes: [], links: [] },
+        geoData: geoRes.data || { locations: [], arcs: [] },
+        timelineEvents: timelineRes.data || [],
+        evidenceList: evidenceRes.data || [],
+        analyticsData: analyticsRes.data || null,
+      });
+
+      if (selectedEntityId) {
+        get().selectEntity(selectedEntityId);
+      }
+    } catch (err) {
+      console.error('Targeted refresh error:', err);
     }
   },
 

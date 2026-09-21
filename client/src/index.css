@@ -179,3 +179,246 @@ html, body, #root {
 .pulsing-indicator {
   animation: pulse-subtle 2s infinite ease-in-out;
 }
+
+/* ==========================================================================
+   PRINT STYLESHEET — Investigation Intelligence Reports
+   Hardened for physical printing and PDF export
+   Preserves 100% of normal screen UI via scoped @media print
+   ========================================================================== */
+@media print {
+  /* Hide non-printable app chrome, navigations, sidebars, toolbars, buttons */
+  header,
+  nav,
+  main,
+  footer,
+  button,
+  .btn,
+  .no-print,
+  .constellation-report-modal-toolbar,
+  .constellation-report-toggles-bar {
+    display: none !important;
+  }
+
+  /* Reset document root for full-page multi-page print */
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Modal unrolling: unclip fixed dimensions and overlays */
+  .constellation-report-modal-overlay {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  .constellation-report-modal-dialog {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+  }
+
+  .constellation-report-scroll-container {
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    height: auto !important;
+  }
+
+  /* Report paper surface: clean white paper with dark legible ink */
+  #constellation-printable-report {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  }
+
+  /* Headings & Classified Banner */
+  #constellation-printable-report h1 {
+    color: #0f172a !important;
+    font-size: 18pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  #constellation-printable-report h2 {
+    color: #0369a1 !important;
+    font-size: 12pt !important;
+    border-bottom: 1.5pt solid #0284c7 !important;
+    padding-bottom: 4pt !important;
+    margin-top: 14pt !important;
+    margin-bottom: 8pt !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .report-classification-header {
+    border-bottom: 2pt solid #0284c7 !important;
+  }
+
+  .report-classification-banner {
+    color: #b91c1c !important;
+    font-weight: 800 !important;
+  }
+
+  #constellation-printable-report strong {
+    color: #0f172a !important;
+  }
+
+  #constellation-printable-report div,
+  #constellation-printable-report span,
+  #constellation-printable-report p {
+    color: #1e293b !important;
+  }
+
+  /* Data Tables */
+  #constellation-printable-report table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 6pt !important;
+    margin-bottom: 12pt !important;
+    font-size: 9pt !important;
+    page-break-inside: auto !important;
+  }
+
+  #constellation-printable-report thead {
+    display: table-header-group !important;
+  }
+
+  #constellation-printable-report th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    border: 1pt solid #cbd5e1 !important;
+    padding: 5pt 6pt !important;
+  }
+
+  #constellation-printable-report td {
+    border: 1pt solid #e2e8f0 !important;
+    color: #1e293b !important;
+    padding: 5pt 6pt !important;
+  }
+
+  #constellation-printable-report tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Intelligence Cards & Callout Blocks */
+  .report-callout-warning {
+    background: #fffbeb !important;
+    border: 1pt solid #f59e0b !important;
+    color: #78350f !important;
+    padding: 8pt 10pt !important;
+    border-radius: 4pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .report-callout-sherlock {
+    background: #f0f9ff !important;
+    border: 1pt solid #38bdf8 !important;
+    color: #0c4a6e !important;
+    padding: 8pt 10pt !important;
+    border-radius: 4pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .report-callout-moriarty {
+    background: #fef2f2 !important;
+    border: 1pt solid #f87171 !important;
+    color: #7f1d1d !important;
+    padding: 8pt 10pt !important;
+    border-radius: 4pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .report-card {
+    background: #f8fafc !important;
+    border: 1pt solid #e2e8f0 !important;
+    padding: 8pt 10pt !important;
+    border-radius: 4pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Badges */
+  #constellation-printable-report .badge {
+    background: #f1f5f9 !important;
+    border: 1pt solid #94a3b8 !important;
+    color: #0f172a !important;
+    font-size: 8pt !important;
+    padding: 1pt 4pt !important;
+  }
+
+  #constellation-printable-report .badge-crimson {
+    background: #fee2e2 !important;
+    border-color: #ef4444 !important;
+    color: #991b1b !important;
+  }
+
+  #constellation-printable-report .badge-cyan {
+    background: #e0f2fe !important;
+    border-color: #0284c7 !important;
+    color: #075985 !important;
+  }
+
+  #constellation-printable-report .badge-emerald {
+    background: #d1fae5 !important;
+    border-color: #10b981 !important;
+    color: #065f46 !important;
+  }
+
+  /* Page Breaks */
+  .report-section {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 16pt !important;
+  }
+
+  .report-signature-block {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-top: 24pt !important;
+    padding-top: 14pt !important;
+    border-top: 1.5pt solid #cbd5e1 !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+}

@@ -100,6 +100,28 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload),
   }),
+
+  // Ingestion & Data Management
+  ingest: (payload) => request('/ingest', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  validateIngest: (payload) => request('/ingest/validate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  getIngestHistory: (params = {}) => {
+    const sp = new URLSearchParams(params);
+    return request(`/ingest/history?${sp.toString()}`);
+  },
+  getIngestHistoryById: (id) => request(`/ingest/history/${encodeURIComponent(id)}`),
+
+  // Synthetic Intelligence Generator
+  getSyntheticScenarios: () => request('/ingest/synthetic/scenarios'),
+  generateSynthetic: (payload) => request('/ingest/synthetic/generate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
 };
 
 export default api;

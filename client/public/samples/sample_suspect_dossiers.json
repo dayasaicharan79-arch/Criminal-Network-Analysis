@@ -1,0 +1,54 @@
+[
+  {
+    "_synthetic_notice": "DEMO / SYNTHETIC DATA ONLY — NOT REAL-WORLD INTELLIGENCE",
+    "suspect_name": "Tariq 'The Sultan' Mansoor",
+    "alias": "The Sultan",
+    "role": "Syndicate Kingpin",
+    "mobile": "+91 98110 44219",
+    "hardware_imei": "864209040112340",
+    "vehicle_plate": "DL-01-AB-1234",
+    "city": "Dubai",
+    "gps_latitude": 25.2048,
+    "gps_longitude": 55.2708,
+    "risk_level": "CRITICAL"
+  },
+  {
+    "_synthetic_notice": "DEMO / SYNTHETIC DATA ONLY — NOT REAL-WORLD INTELLIGENCE",
+    "suspect_name": "Karan 'Munshi' Verma",
+    "alias": "Munshi",
+    "role": "Bridge Hawaladar",
+    "mobile": "+91 98201 55182",
+    "hardware_imei": "864209040112340",
+    "vehicle_plate": "MH-02-CD-5678",
+    "city": "Mumbai",
+    "gps_latitude": 18.9220,
+    "gps_longitude": 72.8347,
+    "risk_level": "HIGH"
+  },
+  {
+    "_synthetic_notice": "DEMO / SYNTHETIC DATA ONLY — NOT REAL-WORLD INTELLIGENCE",
+    "suspect_name": "Farhan Baig",
+    "alias": "Courier-1",
+    "role": "Logistics Transporter",
+    "mobile": "+91 98765 00001",
+    "hardware_imei": "352099001764551",
+    "vehicle_plate": "DL-04-EF-9012",
+    "city": "Delhi",
+    "gps_latitude": 28.6139,
+    "gps_longitude": 77.2090,
+    "risk_level": "MEDIUM"
+  },
+  {
+    "_synthetic_notice": "DEMO / SYNTHETIC DATA ONLY — NOT REAL-WORLD INTELLIGENCE",
+    "suspect_name": "Siddharth Rao",
+    "alias": "Tech Specialist",
+    "role": "Signal Crypto Operator",
+    "mobile": "+91 98450 67890",
+    "hardware_imei": "490154203237510",
+    "vehicle_plate": "KA-03-GH-3456",
+    "city": "Bengaluru",
+    "gps_latitude": 12.9716,
+    "gps_longitude": 77.5946,
+    "risk_level": "HIGH"
+  }
+]

@@ -14,6 +14,8 @@ import {
   Eye,
   RotateCcw,
   ShieldAlert,
+  Database,
+  Printer,
 } from 'lucide-react';
 
 export function HeaderBar() {
@@ -29,6 +31,7 @@ export function HeaderBar() {
     evidenceList,
     resetSelection,
     startCinemaMode,
+    openReportModal,
   } = useInvestigationStore();
 
   const navItems = [
@@ -39,6 +42,7 @@ export function HeaderBar() {
     { id: 'evidence', label: 'Evidence', icon: ShieldCheck },
     { id: 'sherlock', label: 'Sherlock AI', icon: Bot },
     { id: 'moriarty', label: 'Moriarty', icon: Zap },
+    { id: 'data', label: 'Data Hub', icon: Database },
   ];
 
   return (
@@ -163,6 +167,25 @@ export function HeaderBar() {
         >
           <Eye size={14} />
           <span>Investigation Mode</span>
+        </button>
+
+        {/* Investigation Intelligence Report Generator */}
+        <button
+          onClick={openReportModal}
+          className="btn"
+          style={{
+            background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%)',
+            border: '1px solid rgba(0, 242, 254, 0.4)',
+            color: '#00f2fe',
+            padding: '6px 12px',
+            fontSize: '12px',
+            borderRadius: '6px',
+            fontWeight: 600,
+          }}
+          title="Generate Official Investigation Report"
+        >
+          <Printer size={14} />
+          <span>Report</span>
         </button>
       </nav>
 

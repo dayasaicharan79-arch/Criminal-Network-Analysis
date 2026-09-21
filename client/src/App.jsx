@@ -14,6 +14,8 @@ import { EvidenceVaultView } from './components/evidence/EvidenceVaultView.jsx';
 import { SherlockChatView } from './components/ai/SherlockChatView.jsx';
 import { MoriartyEngineView } from './components/ai/MoriartyEngineView.jsx';
 import { GodsEyeCinemaMode } from './components/cinema/GodsEyeCinemaMode.jsx';
+import { DataManagementHub } from './components/data/DataManagementHub.jsx';
+import { InvestigationReportModal } from './components/report/InvestigationReportModal.jsx';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 export function App() {
@@ -92,6 +94,7 @@ export function App() {
           {activeView === 'evidence' && <EvidenceVaultView />}
           {activeView === 'sherlock' && <SherlockChatView />}
           {activeView === 'moriarty' && <MoriartyEngineView />}
+          {activeView === 'data' && <DataManagementHub />}
         </section>
 
         {/* Right Drawer: Canonical Entity Intelligence Dossier */}
@@ -100,6 +103,9 @@ export function App() {
 
       {/* God's Eye Cinema Mode Overlay */}
       {cinemaPlaying && <GodsEyeCinemaMode />}
+
+      {/* Investigation Intelligence Report & Print Engine */}
+      <InvestigationReportModal />
     </div>
   );
 }

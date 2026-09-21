@@ -13,6 +13,7 @@ import { timelineRouter } from './routes/timeline.js';
 import { geoRouter } from './routes/geo.js';
 import { evidenceRouter } from './routes/evidence.js';
 import { aiRouter } from './routes/ai.js';
+import { ingestRouter } from './routes/ingest.js';
 import { runSeed } from './data/seed/index.js';
 
 const app = express();
@@ -49,6 +50,7 @@ app.use('/api/timeline', timelineRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/evidence', evidenceRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/ingest', ingestRouter);
 
 // Catch-all for unknown API routes
 app.use('/api/*', (_req, res) => {

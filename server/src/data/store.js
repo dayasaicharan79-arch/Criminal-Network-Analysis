@@ -34,6 +34,9 @@ class DataStore {
     this.indexEventsByCase = new Map();
     this.indexEvidenceByEntity = new Map();
     this.indexEvidenceByCase = new Map();
+
+    // Ingestion audit trail & provenance
+    this.ingestionHistory = new Map();
   }
 
   // ---------------------------------------------------------------------------
@@ -79,6 +82,40 @@ class DataStore {
 
   getEntity(id) {
     return this.entities.get(id) || null;
+  }
+
+  updateEntity(id, updates = {}) {
+    const existing = this.entities.get(id);
+    if (!existing) return null;
+
+    const mergedCaseIds = Array.isArray(updates.caseIds)
+      ? [...new Set([...existing.caseIds, ...updates.caseIds])]
+      : existing.caseIds;
+
+    const updated = {
+      ...existing,
+      label: updates.label ? updates.label.trim() : existing.label,
+      subType: updates.subType !== undefined ? updates.subType : existing.subType,
+      caseIds: mergedCaseIds,
+      confidence: updates.confidence !== undefined ? Math.max(existing.confidence, updates.confidence) : existing.confidence,
+      attributes: {
+        ...existing.attributes,
+        ...(updates.attributes || {}),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.entities.set(id, updated);
+
+    // Update case index if new cases were associated
+    for (const caseId of mergedCaseIds) {
+      if (!this.indexEntitiesByCase.has(caseId)) {
+        this.indexEntitiesByCase.set(caseId, new Set());
+      }
+      this.indexEntitiesByCase.get(caseId).add(id);
+    }
+
+    return updated;
   }
 
   getAllEntities() {
@@ -431,6 +468,29 @@ class DataStore {
       events: this.events.size,
       evidence: this.evidence.size,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ingestion & Provenance Audit History
+  // ---------------------------------------------------------------------------
+  addIngestionHistory(batch) {
+    if (!this.ingestionHistory) {
+      this.ingestionHistory = new Map();
+    }
+    this.ingestionHistory.set(batch.batchId, batch);
+    return batch;
+  }
+
+  getIngestionHistory({ limit = 50 } = {}) {
+    if (!this.ingestionHistory) return [];
+    return Array.from(this.ingestionHistory.values())
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, limit);
+  }
+
+  getIngestionHistoryById(batchId) {
+    if (!this.ingestionHistory) return null;
+    return this.ingestionHistory.get(batchId) || null;
   }
 }
 
