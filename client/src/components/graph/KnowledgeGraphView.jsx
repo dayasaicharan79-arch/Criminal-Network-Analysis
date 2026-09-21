@@ -6,10 +6,14 @@
  * - Performance-aware billboarded canvas sprite label system with distance/zoom LOD
  * - 3D geometric visual differentiation per entity type (Sphere, Cube, Cylinder, Cone, Octahedron, etc.)
  * - Rich tactical investigator legend documenting shapes, edge semantics, and analytical states
+ * - Interactive 3D Graph Physics Controls (Charge, Link Distance, Collision, Damping, Community Anchors)
+ * - Timeline ↔ Graph Temporal Playback Synchronization
+ * - Cross-Filter Query Presets Bar
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import * as THREE from 'three';
+import { forceCollide, forceX, forceZ } from 'd3-force-3d';
 import { useInvestigationStore } from '../../store/investigationStore.js';
 import {
   ZoomIn,
@@ -18,9 +22,14 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Info,
-  Filter,
+  Sliders,
+  PlayCircle,
+  Clock,
+  RotateCcw,
 } from 'lucide-react';
+import GraphPhysicsHUD from './GraphPhysicsHUD.jsx';
+import TimelinePlaybackBar from './TimelinePlaybackBar.jsx';
+import QueryPresetsBar from './QueryPresetsBar.jsx';
 
 const ENTITY_CONFIG = {
   criminal: { color: '#ef4444', shape: 'sphere', label: 'Criminal / Kingpin' },
@@ -95,7 +104,6 @@ function createLabelSprite(text, subtext, color, isSelected, isKeyTarget) {
   });
 
   const sprite = new THREE.Sprite(spriteMaterial);
-  // Aspect ratio 4:1
   const scaleMultiplier = isSelected ? 1.3 : isKeyTarget ? 1.15 : 1.0;
   sprite.scale.set(24 * scaleMultiplier, 6 * scaleMultiplier, 1);
   return sprite;
@@ -130,8 +138,12 @@ function createNodeGeometry(type, radius) {
 export function KnowledgeGraphView() {
   const containerRef = useRef(null);
   const graphInstanceRef = useRef(null);
+  const nodeObjectsRef = useRef(new Map());
+
   const [hoverNode, setHoverNode] = useState(null);
   const [legendOpen, setLegendOpen] = useState(true);
+  const [physicsHUDOpen, setPhysicsHUDOpen] = useState(false);
+  const [timelineHUDOpen, setTimelineHUDOpen] = useState(true);
 
   const {
     graphData,
@@ -140,17 +152,67 @@ export function KnowledgeGraphView() {
     selectRelationship,
     filterEntityTypes,
     toggleEntityTypeFilter,
+    graphPhysics,
+    timelinePlayback,
+    timelineEvents,
+    analyticsData,
   } = useInvestigationStore();
 
   const selectedEntityIdRef = useRef(selectedEntityId);
   selectedEntityIdRef.current = selectedEntityId;
 
+  const { isPlaying, currentTime, windowMode, activeEventIndex } = timelinePlayback;
+
+  // Sorted timeline events
+  const sortedEvents = useMemo(() => {
+    return [...(timelineEvents || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }, [timelineEvents]);
+
+  // Determine active and focused entities based on timeline state
+  const { activeNodeIds, focusedNodeIds, isFilteringActive } = useMemo(() => {
+    if (!currentTime || sortedEvents.length === 0) {
+      return { activeNodeIds: null, focusedNodeIds: new Set(), isFilteringActive: false };
+    }
+    const curDate = new Date(currentTime);
+    let activeEvs = [];
+    let focusEv = null;
+
+    if (windowMode === 'cumulative') {
+      activeEvs = sortedEvents.filter(e => new Date(e.timestamp) <= curDate);
+      focusEv = sortedEvents[activeEventIndex] || activeEvs[activeEvs.length - 1] || null;
+    } else {
+      focusEv = sortedEvents[activeEventIndex] || sortedEvents.find(e => e.timestamp === currentTime) || null;
+      activeEvs = focusEv ? [focusEv] : [];
+    }
+
+    const activeSet = new Set(activeEvs.flatMap(e => e.entityIds || []));
+    const focusSet = new Set(focusEv?.entityIds || []);
+
+    return {
+      activeNodeIds: activeSet,
+      focusedNodeIds: focusSet,
+      isFilteringActive: true,
+    };
+  }, [currentTime, windowMode, activeEventIndex, sortedEvents]);
+
+  // Keep refs for link accessors
+  const activeNodeIdsRef = useRef(activeNodeIds);
+  activeNodeIdsRef.current = activeNodeIds;
+
+  const focusedNodeIdsRef = useRef(focusedNodeIds);
+  focusedNodeIdsRef.current = focusedNodeIds;
+
+  const isFilteringActiveRef = useRef(isFilteringActive);
+  isFilteringActiveRef.current = isFilteringActive;
+
+  // Initialize 3D Force Graph
   useEffect(() => {
     if (!containerRef.current) return;
 
     if (graphInstanceRef.current) {
       graphInstanceRef.current._destructor?.();
       containerRef.current.innerHTML = '';
+      nodeObjectsRef.current.clear();
     }
 
     const width = containerRef.current.clientWidth || window.innerWidth - 700;
@@ -174,7 +236,7 @@ export function KnowledgeGraphView() {
         const cfg = ENTITY_CONFIG[node.type] || ENTITY_CONFIG.person;
         const color = cfg.color;
 
-        // Central / Key target detection (from id, role, or attributes)
+        // Central / Key target detection
         const isKeyTarget =
           node.id === 'PER-SULTAN-01' ||
           node.id === 'PER-MUNSHI-02' ||
@@ -194,22 +256,23 @@ export function KnowledgeGraphView() {
           emissive: new THREE.Color(isSelected ? '#00f2fe' : isHovered ? color : isKeyTarget ? '#f59e0b' : '#000000'),
           emissiveIntensity: isSelected ? 0.7 : isHovered ? 0.4 : isKeyTarget ? 0.25 : 0.05,
           roughness: 0.3,
+          transparent: true,
+          opacity: 1.0,
         });
         const mesh = new THREE.Mesh(geometry, material);
         group.add(mesh);
 
-        // 2. Selection Halo Ring
-        if (isSelected) {
-          const ringGeo = new THREE.RingGeometry(radius + 2, radius + 4, 32);
-          const ringMat = new THREE.MeshBasicMaterial({
-            color: new THREE.Color('#00f2fe'),
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.85,
-          });
-          const ring = new THREE.Mesh(ringGeo, ringMat);
-          group.add(ring);
-        }
+        // 2. Selection / Focus Halo Ring
+        const ringGeo = new THREE.RingGeometry(radius + 2, radius + 4, 32);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color('#00f2fe'),
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.visible = isSelected;
+        group.add(ring);
 
         // 3. Named Node Label Sprite (Billboarded Canvas Text)
         const labelSprite = createLabelSprite(
@@ -222,7 +285,16 @@ export function KnowledgeGraphView() {
         labelSprite.position.set(0, radius + 7, 0);
         group.add(labelSprite);
 
-        // Store label reference and metadata on group for camera distance LOD
+        // Cache object elements for instant temporal visual modulation
+        nodeObjectsRef.current.set(node.id, {
+          mesh,
+          material,
+          ring,
+          labelSprite,
+          baseColor: color,
+          isKeyTarget,
+        });
+
         group.userData = {
           labelSprite,
           isSelected,
@@ -234,33 +306,71 @@ export function KnowledgeGraphView() {
       })
       .nodeRelSize(6)
       .linkWidth(link => {
-        const currSelected = selectedEntityIdRef.current;
-        const isConnected = currSelected === (link.source?.id || link.source) ||
-                            currSelected === (link.target?.id || link.target);
+        const srcId = link.source?.id || link.source;
+        const tgtId = link.target?.id || link.target;
+        const isConnected = selectedEntityIdRef.current === srcId || selectedEntityIdRef.current === tgtId;
+
+        if (isFilteringActiveRef.current) {
+          const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
+          if (focused) return 3.6;
+          const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
+          if (!active) return 0.5;
+          return isConnected ? 2.8 : 1.6;
+        }
+
         return isConnected ? 2.8 : 1.2;
       })
       .linkColor(link => {
-        const currSelected = selectedEntityIdRef.current;
-        const isConnected = currSelected === (link.source?.id || link.source) ||
-                            currSelected === (link.target?.id || link.target);
+        const srcId = link.source?.id || link.source;
+        const tgtId = link.target?.id || link.target;
+        const isConnected = selectedEntityIdRef.current === srcId || selectedEntityIdRef.current === tgtId;
+
+        if (isFilteringActiveRef.current) {
+          const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
+          if (focused) return '#f59e0b';
+          const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
+          if (!active) return 'rgba(255, 255, 255, 0.05)';
+          if (isConnected) return '#00f2fe';
+          return 'rgba(0, 240, 255, 0.6)';
+        }
+
         if (isConnected) return '#00f2fe';
         if (link.classification === 'FACT') return 'rgba(255, 255, 255, 0.3)';
         return 'rgba(245, 158, 11, 0.45)';
       })
       .linkDirectionalParticles(link => {
-        const currSelected = selectedEntityIdRef.current;
-        const isConnected = currSelected === (link.source?.id || link.source) ||
-                            currSelected === (link.target?.id || link.target);
+        const srcId = link.source?.id || link.source;
+        const tgtId = link.target?.id || link.target;
+        const isConnected = selectedEntityIdRef.current === srcId || selectedEntityIdRef.current === tgtId;
+
+        if (isFilteringActiveRef.current) {
+          const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
+          if (focused) return 5;
+          const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
+          if (!active) return 0;
+          return isConnected ? 4 : 2;
+        }
+
         return isConnected ? 4 : 1;
       })
       .linkDirectionalParticleWidth(link => {
-        const currSelected = selectedEntityIdRef.current;
-        const isConnected = currSelected === (link.source?.id || link.source) ||
-                            currSelected === (link.target?.id || link.target);
-        return isConnected ? 2.5 : 1.2;
+        const srcId = link.source?.id || link.source;
+        const tgtId = link.target?.id || link.target;
+        if (isFilteringActiveRef.current) {
+          const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
+          if (focused) return 3.2;
+          const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
+          if (!active) return 0;
+        }
+        return 1.8;
       })
-      .linkDirectionalParticleSpeed(0.006)
-      .linkDirectionalParticleColor(() => '#00f2fe')
+      .linkDirectionalParticleSpeed(0.007)
+      .linkDirectionalParticleColor(link => {
+        const srcId = link.source?.id || link.source;
+        const tgtId = link.target?.id || link.target;
+        const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
+        return focused ? '#f59e0b' : '#00f2fe';
+      })
       .onNodeClick(node => {
         selectEntity(node.id);
         const distance = 85;
@@ -309,14 +419,111 @@ export function KnowledgeGraphView() {
   // Update Graph Data when data changes
   useEffect(() => {
     if (graphInstanceRef.current && graphData) {
+      nodeObjectsRef.current.clear();
       graphInstanceRef.current.graphData(graphData);
     }
   }, [graphData]);
 
-  // Respond to global selection change
+  // Apply Analyst Physics Tuning to D3 Simulation
+  useEffect(() => {
+    const Graph = graphInstanceRef.current;
+    if (!Graph || !graphPhysics) return;
+
+    // 1. Charge / Repulsion strength
+    Graph.d3Force('charge')?.strength(graphPhysics.chargeStrength);
+
+    // 2. Link Spring Distance
+    Graph.d3Force('link')?.distance(graphPhysics.linkDistance);
+
+    // 3. Collision avoidance radius
+    if (graphPhysics.collisionRadius > 0) {
+      Graph.d3Force('collide', forceCollide(node => 7 + graphPhysics.collisionRadius));
+    } else {
+      Graph.d3Force('collide', null);
+    }
+
+    // 4. Simulation Damping / Velocity Decay
+    if (typeof Graph.d3VelocityDecay === 'function') {
+      Graph.d3VelocityDecay(graphPhysics.damping);
+    }
+
+    // 5. Community / Clustering Anchors
+    if (graphPhysics.communityAnchors && analyticsData?.communities?.length > 0) {
+      const comms = analyticsData.communities;
+      const K = comms.length;
+      const nodeCommunityMap = new Map();
+      comms.forEach((comm, idx) => {
+        const angle = (2 * Math.PI * idx) / Math.max(1, K);
+        const radius = 130;
+        const cx = radius * Math.cos(angle);
+        const cz = radius * Math.sin(angle);
+        (comm.memberEntities || []).forEach(ent => {
+          if (ent?.id) {
+            nodeCommunityMap.set(ent.id, { x: cx, z: cz });
+          }
+        });
+      });
+
+      Graph.d3Force('clusterX', forceX(n => nodeCommunityMap.get(n.id)?.x || 0).strength(0.14));
+      Graph.d3Force('clusterZ', forceZ(n => nodeCommunityMap.get(n.id)?.z || 0).strength(0.14));
+    } else {
+      Graph.d3Force('clusterX', null);
+      Graph.d3Force('clusterZ', null);
+    }
+
+    // Reheat simulation smoothly so forces take effect
+    Graph.d3ReheatSimulation();
+  }, [graphPhysics, analyticsData]);
+
+  // Modulate Node & Link Appearance During Timeline Playback / Filtering
+  useEffect(() => {
+    nodeObjectsRef.current.forEach((obj, nodeId) => {
+      const { material, ring, labelSprite, baseColor, isKeyTarget } = obj;
+      const isSelected = selectedEntityId === nodeId;
+      const isFocused = focusedNodeIds.has(nodeId);
+      const isActive = !isFilteringActive || (activeNodeIds && activeNodeIds.has(nodeId));
+
+      if (!isActive) {
+        // Outside temporal window: gracefully dimmed without losing position
+        material.transparent = true;
+        material.opacity = 0.18;
+        material.emissiveIntensity = 0.0;
+        if (labelSprite) labelSprite.visible = false;
+        if (ring) ring.visible = false;
+      } else if (isFocused) {
+        // In-focus milestone event actor
+        material.transparent = false;
+        material.opacity = 1.0;
+        material.emissive.set(isSelected ? '#00f2fe' : '#f59e0b');
+        material.emissiveIntensity = 0.85;
+        if (labelSprite) labelSprite.visible = true;
+        if (ring) {
+          ring.visible = true;
+          ring.material.color.set(isSelected ? '#00f2fe' : '#f59e0b');
+        }
+      } else {
+        // Active entity in cumulative timeline
+        material.transparent = false;
+        material.opacity = isFilteringActive ? 0.85 : 1.0;
+        material.emissive.set(isSelected ? '#00f2fe' : isKeyTarget ? '#f59e0b' : '#000000');
+        material.emissiveIntensity = isSelected ? 0.7 : isKeyTarget ? 0.25 : 0.05;
+        if (labelSprite) labelSprite.visible = true;
+        if (ring) {
+          ring.visible = isSelected;
+          ring.material.color.set('#00f2fe');
+        }
+      }
+    });
+
+    if (graphInstanceRef.current) {
+      // Re-evaluate link widths and colors
+      graphInstanceRef.current.refresh();
+    }
+  }, [activeNodeIds, focusedNodeIds, isFilteringActive, selectedEntityId]);
+
+  // Respond to global selection change (auto camera fly-to)
   useEffect(() => {
     if (!graphInstanceRef.current) return;
-    graphInstanceRef.current.refresh();
 
     if (selectedEntityId && graphData?.nodes) {
       const node = graphData.nodes.find(n => n.id === selectedEntityId);
@@ -339,73 +546,181 @@ export function KnowledgeGraphView() {
     }
   };
 
+  const handleReheatSimulation = () => {
+    if (graphInstanceRef.current) {
+      graphInstanceRef.current.d3ReheatSimulation();
+    }
+  };
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       {/* 3D WebGL Canvas */}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Floating Tactical Zoom & Pan Controls */}
-      <div style={{
-        position: 'absolute',
-        top: '16px',
-        left: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-        zIndex: 10,
-      }}>
-        <div className="glass-panel" style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {/* Top Floating Bar: Controls & Presets */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          left: 16,
+          right: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          pointerEvents: 'none',
+          zIndex: 20,
+        }}
+      >
+        {/* Left cluster: Zoom controls + Query Presets */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
+          <div className="glass-panel" style={{ padding: '4px', display: 'flex', gap: '4px' }}>
+            <button
+              onClick={handleRecenter}
+              className="btn btn-ghost"
+              style={{ padding: '6px', borderRadius: '4px' }}
+              title="Recenter Camera View"
+            >
+              <Maximize2 size={15} />
+            </button>
+            <button
+              onClick={() => {
+                if (graphInstanceRef.current) {
+                  const pos = graphInstanceRef.current.cameraPosition();
+                  graphInstanceRef.current.cameraPosition({ x: pos.x * 0.75, y: pos.y * 0.75, z: pos.z * 0.75 }, null, 400);
+                }
+              }}
+              className="btn btn-ghost"
+              style={{ padding: '6px', borderRadius: '4px' }}
+              title="Zoom In"
+            >
+              <ZoomIn size={15} />
+            </button>
+            <button
+              onClick={() => {
+                if (graphInstanceRef.current) {
+                  const pos = graphInstanceRef.current.cameraPosition();
+                  graphInstanceRef.current.cameraPosition({ x: pos.x * 1.35, y: pos.y * 1.35, z: pos.z * 1.35 }, null, 400);
+                }
+              }}
+              className="btn btn-ghost"
+              style={{ padding: '6px', borderRadius: '4px' }}
+              title="Zoom Out"
+            >
+              <ZoomOut size={15} />
+            </button>
+          </div>
+
+          {/* Cross-Filter Query Presets Bar */}
+          <QueryPresetsBar />
+        </div>
+
+        {/* Right cluster: HUD Toggles */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, pointerEvents: 'auto' }}>
+          {/* Reheat Simulation Quick Button */}
           <button
-            onClick={handleRecenter}
-            className="btn btn-ghost"
-            style={{ padding: '6px', borderRadius: '4px' }}
-            title="Recenter Camera View"
-          >
-            <Maximize2 size={15} />
-          </button>
-          <button
-            onClick={() => {
-              if (graphInstanceRef.current) {
-                const pos = graphInstanceRef.current.cameraPosition();
-                graphInstanceRef.current.cameraPosition({ x: pos.x * 0.75, y: pos.y * 0.75, z: pos.z * 0.75 }, null, 400);
-              }
+            onClick={handleReheatSimulation}
+            title="Reheat 3D Simulation Dynamics"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'rgba(10, 15, 29, 0.75)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#94a3b8',
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
             }}
-            className="btn btn-ghost"
-            style={{ padding: '6px', borderRadius: '4px' }}
-            title="Zoom In"
           >
-            <ZoomIn size={15} />
+            <RotateCcw size={13} />
+            <span>Reheat</span>
           </button>
+
+          {/* Physics HUD Toggle */}
           <button
-            onClick={() => {
-              if (graphInstanceRef.current) {
-                const pos = graphInstanceRef.current.cameraPosition();
-                graphInstanceRef.current.cameraPosition({ x: pos.x * 1.35, y: pos.y * 1.35, z: pos.z * 1.35 }, null, 400);
-              }
+            onClick={() => setPhysicsHUDOpen(!physicsHUDOpen)}
+            title="Toggle 3D Graph Physics Controls"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: physicsHUDOpen ? 'rgba(0, 240, 255, 0.2)' : 'rgba(10, 15, 29, 0.75)',
+              backdropFilter: 'blur(12px)',
+              border: `1px solid ${physicsHUDOpen ? '#00f0ff' : 'rgba(255, 255, 255, 0.12)'}`,
+              color: physicsHUDOpen ? '#00f0ff' : '#94a3b8',
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: physicsHUDOpen ? '0 0 12px rgba(0, 240, 255, 0.25)' : 'none',
             }}
-            className="btn btn-ghost"
-            style={{ padding: '6px', borderRadius: '4px' }}
-            title="Zoom Out"
           >
-            <ZoomOut size={15} />
+            <Sliders size={13} />
+            <span>Physics</span>
+          </button>
+
+          {/* Timeline Playback HUD Toggle */}
+          <button
+            onClick={() => setTimelineHUDOpen(!timelineHUDOpen)}
+            title="Toggle Timeline Playback HUD"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: timelineHUDOpen ? 'rgba(0, 240, 255, 0.2)' : 'rgba(10, 15, 29, 0.75)',
+              backdropFilter: 'blur(12px)',
+              border: `1px solid ${timelineHUDOpen ? '#00f0ff' : 'rgba(255, 255, 255, 0.12)'}`,
+              color: timelineHUDOpen ? '#00f0ff' : '#94a3b8',
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: timelineHUDOpen ? '0 0 12px rgba(0, 240, 255, 0.25)' : 'none',
+            }}
+          >
+            <PlayCircle size={13} />
+            <span>Timeline</span>
           </button>
         </div>
       </div>
 
+      {/* Physics HUD Floating Panel */}
+      <GraphPhysicsHUD
+        isOpen={physicsHUDOpen}
+        onClose={() => setPhysicsHUDOpen(false)}
+        onReheat={handleReheatSimulation}
+      />
+
+      {/* Timeline Playback Bar Floating Dock */}
+      <TimelinePlaybackBar
+        isOpen={timelineHUDOpen}
+        onClose={() => setTimelineHUDOpen(false)}
+      />
+
       {/* Investigator Graph Legend Overlay (Expandable) */}
-      <div style={{
-        position: 'absolute',
-        bottom: '16px',
-        left: '16px',
-        zIndex: 10,
-        maxWidth: '480px',
-      }}>
-        <div className="glass-panel" style={{
-          padding: '8px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-        }}>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '16px',
+          left: '16px',
+          zIndex: 10,
+          maxWidth: '480px',
+        }}
+      >
+        <div
+          className="glass-panel"
+          style={{
+            padding: '8px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+        >
           <div
             onClick={() => setLegendOpen(!legendOpen)}
             style={{
@@ -426,13 +741,15 @@ export function KnowledgeGraphView() {
           {legendOpen && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '4px', borderTop: '1px solid var(--border-subtle)' }}>
               {/* Entity Types & Shapes Grid */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '6px',
-                fontSize: '10px',
-                fontFamily: 'var(--font-mono)',
-              }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '6px',
+                  fontSize: '10px',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
                 {Object.entries(ENTITY_CONFIG).slice(0, 9).map(([type, cfg]) => {
                   const isFiltered = filterEntityTypes.includes(type);
                   return (
@@ -448,14 +765,16 @@ export function KnowledgeGraphView() {
                       }}
                       title={`Click to filter ${cfg.label}`}
                     >
-                      <div style={{
-                        width: '9px',
-                        height: '9px',
-                        borderRadius: cfg.shape === 'sphere' ? '50%' : cfg.shape === 'box' ? '2px' : '0',
-                        transform: cfg.shape === 'octahedron' ? 'rotate(45deg)' : 'none',
-                        backgroundColor: cfg.color,
-                        boxShadow: `0 0 6px ${cfg.color}88`,
-                      }} />
+                      <div
+                        style={{
+                          width: '9px',
+                          height: '9px',
+                          borderRadius: cfg.shape === 'sphere' ? '50%' : cfg.shape === 'box' ? '2px' : '0',
+                          transform: cfg.shape === 'octahedron' ? 'rotate(45deg)' : 'none',
+                          backgroundColor: cfg.color,
+                          boxShadow: `0 0 6px ${cfg.color}88`,
+                        }}
+                      />
                       <span style={{ color: isFiltered ? 'var(--accent-cyan)' : 'var(--text-secondary)' }}>
                         {cfg.label}
                       </span>
@@ -465,16 +784,18 @@ export function KnowledgeGraphView() {
               </div>
 
               {/* Edge Semantics & Visual States */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingTop: '6px',
-                borderTop: '1px solid rgba(255,255,255,0.06)',
-                fontSize: '9px',
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-muted)',
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingTop: '6px',
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '9px',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                }}
+              >
                 <span>EDGE: <strong style={{ color: '#fff' }}>Solid</strong> (Fact) // <strong style={{ color: 'var(--accent-gold)' }}>Dashed</strong> (Inferred)</span>
                 <span>NODE: <strong style={{ color: 'var(--accent-cyan)' }}>Ring</strong> (Selected) // <strong style={{ color: '#f59e0b' }}>Glow</strong> (Key Target)</span>
               </div>

@@ -37,6 +37,8 @@ export function TimelineView() {
     selectEvidence,
     selectLocation,
     setActiveView,
+    timelinePlayback,
+    setTimelinePlayback,
   } = useInvestigationStore();
 
   const [filterType, setFilterType] = useState('ALL');
@@ -100,6 +102,7 @@ export function TimelineView() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {filteredEvents.map((ev, idx) => {
             const isSelected = selectedEventId === ev.id;
+            const isCurrentPlayback = timelinePlayback.currentTime === ev.timestamp;
             const config = EVENT_TYPE_CONFIG[ev.eventType] || { color: '#94a3b8', icon: Clock, label: ev.eventType };
             const Icon = config.icon;
 
@@ -120,17 +123,17 @@ export function TimelineView() {
                   width: '38px',
                   height: '38px',
                   borderRadius: '50%',
-                  background: isSelected ? config.color : 'var(--bg-surface-elevated)',
-                  border: `2px solid ${config.color}`,
+                  background: isCurrentPlayback ? '#00f2fe' : isSelected ? config.color : 'var(--bg-surface-elevated)',
+                  border: `2px solid ${isCurrentPlayback ? '#00f2fe' : config.color}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: isSelected ? `0 0 16px ${config.color}` : 'none',
+                  boxShadow: isCurrentPlayback ? '0 0 20px #00f2fe' : isSelected ? `0 0 16px ${config.color}` : 'none',
                   zIndex: 2,
                   flexShrink: 0,
                   transition: 'all 0.2s ease',
                 }}>
-                  <Icon size={18} color={isSelected ? '#07090e' : config.color} />
+                  <Icon size={18} color={isCurrentPlayback || isSelected ? '#07090e' : config.color} />
                 </div>
 
                 {/* Event Card Content */}
@@ -139,9 +142,10 @@ export function TimelineView() {
                   style={{
                     flex: 1,
                     padding: '16px',
-                    border: isSelected ? `1px solid ${config.color}` : '1px solid var(--border-subtle)',
-                    background: isSelected ? 'rgba(0, 242, 254, 0.08)' : 'var(--bg-surface-glass)',
+                    border: isCurrentPlayback ? '1px solid #00f2fe' : isSelected ? `1px solid ${config.color}` : '1px solid var(--border-subtle)',
+                    background: isCurrentPlayback ? 'rgba(0, 240, 255, 0.12)' : isSelected ? 'rgba(0, 242, 254, 0.08)' : 'var(--bg-surface-glass)',
                     borderRadius: 'var(--radius-lg)',
+                    boxShadow: isCurrentPlayback ? '0 0 24px rgba(0, 240, 255, 0.15)' : 'none',
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -155,6 +159,11 @@ export function TimelineView() {
                       </span>
                       {ev.severity === 'CRITICAL' && (
                         <span className="badge badge-crimson">CRITICAL SEVERITY</span>
+                      )}
+                      {isCurrentPlayback && (
+                        <span className="badge" style={{ background: 'rgba(0, 240, 255, 0.2)', color: '#00f2fe', border: '1px solid #00f2fe' }}>
+                          PLAYBACK SYNC
+                        </span>
                       )}
                     </div>
 
@@ -213,10 +222,14 @@ export function TimelineView() {
                       onClick={(e) => {
                         e.stopPropagation();
                         selectEvent(ev.id);
+                        setTimelinePlayback({
+                          currentTime: ev.timestamp,
+                          activeEventIndex: timelineEvents.findIndex(t => t.id === ev.id),
+                        });
                         setActiveView('graph');
                       }}
                       className="btn btn-ghost"
-                      style={{ padding: '2px 8px', fontSize: '10px', marginLeft: 'auto' }}
+                      style={{ padding: '2px 8px', fontSize: '10px', marginLeft: 'auto', color: 'var(--accent-cyan)' }}
                     >
                       <span>Focus on 3D Graph</span>
                       <ChevronRight size={12} />

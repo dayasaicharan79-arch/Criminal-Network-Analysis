@@ -7,6 +7,35 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
 
+export const DEFAULT_GRAPH_PHYSICS = {
+  chargeStrength: -160,    // Repulsion (-50 to -600)
+  linkDistance: 45,        // Spring distance (15 to 150)
+  collisionRadius: 15,     // Anti-overlap radius (0 to 30)
+  damping: 0.4,            // Velocity decay / damping (0.1 to 0.8)
+  velocityDecay: 0.4,     // Damping/stability alias
+  communityAnchors: false, // Cluster around community centroids
+};
+
+export const DEFAULT_TIMELINE_PLAYBACK = {
+  isPlaying: false,
+  currentTime: null,        // ISO string or timestamp ms
+  timeWindowMs: 86400000,   // 24 hours window for 'window' mode
+  windowMode: 'cumulative', // 'cumulative' | 'slice'
+  speed: 1,                 // 0.5, 1, 2, 4
+  playbackSpeed: 1,         // Speed alias
+  activeEventIndex: -1,     // Index into sorted events
+};
+
+const loadSavedPresets = () => {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = localStorage.getItem('constellation_query_presets');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
 export const useInvestigationStore = create((set, get) => ({
   // Core Navigation & View
   activeView: 'graph', // 'graph' | 'geo' | 'timeline' | 'analytics' | 'evidence' | 'sherlock' | 'moriarty' | 'cinema'
@@ -37,6 +66,16 @@ export const useInvestigationStore = create((set, get) => ({
   filterEntityTypes: [], // empty = all
   filterTimeRange: null, // { start, end }
 
+  // Graph Physics Tuning
+  graphPhysics: { ...DEFAULT_GRAPH_PHYSICS },
+
+  // Timeline Playback Synchronization
+  timelinePlayback: { ...DEFAULT_TIMELINE_PLAYBACK },
+
+  // Analyst Query Presets
+  activePresetId: null,
+  customPresets: loadSavedPresets(),
+
   // Status & Telemetry
   loading: false,
   error: null,
@@ -66,8 +105,160 @@ export const useInvestigationStore = create((set, get) => ({
   },
 
   clearFilters: () => {
-    set({ filterMinConfidence: 0.0, filterEntityTypes: [], filterTimeRange: null });
+    set({ filterMinConfidence: 0.0, filterEntityTypes: [], filterTimeRange: null, activePresetId: null });
     get().reloadGraph();
+  },
+
+  // ---------------------------------------------------------------------------
+  // Graph Physics Actions
+  // ---------------------------------------------------------------------------
+  setGraphPhysics: (patch) => {
+    set(state => ({ graphPhysics: { ...state.graphPhysics, ...patch } }));
+  },
+
+  resetGraphPhysics: () => {
+    set({ graphPhysics: { ...DEFAULT_GRAPH_PHYSICS } });
+  },
+
+  // ---------------------------------------------------------------------------
+  // Timeline Playback Actions
+  // ---------------------------------------------------------------------------
+  setTimelinePlayback: (patch) => {
+    set(state => ({ timelinePlayback: { ...state.timelinePlayback, ...patch } }));
+  },
+
+  togglePlayback: () => {
+    const isPlaying = !get().timelinePlayback.isPlaying;
+    const sorted = [...get().timelineEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    if (isPlaying && !get().timelinePlayback.currentTime && sorted.length > 0) {
+      set(state => ({
+        timelinePlayback: {
+          ...state.timelinePlayback,
+          isPlaying: true,
+          currentTime: sorted[0].timestamp,
+          activeEventIndex: 0,
+        },
+      }));
+    } else {
+      set(state => ({
+        timelinePlayback: {
+          ...state.timelinePlayback,
+          isPlaying,
+        },
+      }));
+    }
+  },
+
+  stepPlayback: (direction) => {
+    const sorted = [...get().timelineEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    if (sorted.length === 0) return;
+    const currentIndex = get().timelinePlayback.activeEventIndex;
+    let nextIndex = currentIndex === -1 ? 0 : currentIndex + direction;
+    if (nextIndex < 0) nextIndex = 0;
+    if (nextIndex >= sorted.length) nextIndex = sorted.length - 1;
+    const nextEvent = sorted[nextIndex];
+    set(state => ({
+      timelinePlayback: {
+        ...state.timelinePlayback,
+        currentTime: nextEvent.timestamp,
+        activeEventIndex: nextIndex,
+      },
+      selectedEventId: nextEvent.id,
+    }));
+  },
+
+  resetPlayback: () => {
+    const sorted = [...get().timelineEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    set(state => ({
+      timelinePlayback: {
+        ...state.timelinePlayback,
+        isPlaying: false,
+        currentTime: sorted.length > 0 ? sorted[0].timestamp : null,
+        activeEventIndex: sorted.length > 0 ? 0 : -1,
+      },
+    }));
+  },
+
+  // ---------------------------------------------------------------------------
+  // Analyst Query Presets Actions
+  // ---------------------------------------------------------------------------
+  applyPreset: (presetId) => {
+    if (presetId === 'hawala') {
+      set({
+        activePresetId: 'hawala',
+        filterEntityTypes: ['person', 'criminal', 'suspect', 'organization', 'transaction'],
+        filterMinConfidence: 0.8,
+      });
+      get().reloadGraph();
+    } else if (presetId === 'burner') {
+      set({
+        activePresetId: 'burner',
+        filterEntityTypes: ['phone', 'device', 'person', 'criminal', 'suspect'],
+        filterMinConfidence: 0.0,
+      });
+      get().reloadGraph();
+    } else if (presetId === 'bridges') {
+      set({
+        activePresetId: 'bridges',
+        filterEntityTypes: [],
+        filterMinConfidence: 0.0,
+      });
+      const topBridge = get().analyticsData?.bridgeNodes?.[0];
+      if (topBridge) {
+        get().selectEntity(topBridge.id);
+      }
+      get().reloadGraph();
+    } else if (presetId === 'clear') {
+      set({
+        activePresetId: null,
+        filterEntityTypes: [],
+        filterMinConfidence: 0.0,
+      });
+      get().reloadGraph();
+    } else {
+      const custom = get().customPresets.find(p => p.id === presetId);
+      if (custom) {
+        set({
+          activePresetId: custom.id,
+          filterEntityTypes: custom.typeFilter || [],
+          filterMinConfidence: custom.minConfidence || 0.0,
+          graphPhysics: custom.physics ? { ...get().graphPhysics, ...custom.physics } : get().graphPhysics,
+        });
+        get().reloadGraph();
+      }
+    }
+  },
+
+  saveCustomPreset: (name) => {
+    if (!name || !name.trim()) return;
+    const newPreset = {
+      id: `custom-${Date.now()}`,
+      name: name.trim(),
+      typeFilter: [...get().filterEntityTypes],
+      minConfidence: get().filterMinConfidence,
+      physics: { ...get().graphPhysics },
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...get().customPresets.filter(p => p.name !== newPreset.name), newPreset];
+    try {
+      localStorage.setItem('constellation_query_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('LocalStorage preset save error:', e);
+    }
+    set({ customPresets: updated, activePresetId: newPreset.id });
+  },
+
+  deleteCustomPreset: (presetId) => {
+    const updated = get().customPresets.filter(p => p.id !== presetId);
+    try {
+      localStorage.setItem('constellation_query_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('LocalStorage preset delete error:', e);
+    }
+    set(state => ({
+      customPresets: updated,
+      activePresetId: state.activePresetId === presetId ? null : state.activePresetId,
+    }));
   },
 
   resetSelection: () => {
