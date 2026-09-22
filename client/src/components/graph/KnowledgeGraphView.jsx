@@ -46,24 +46,92 @@ const ENTITY_CONFIG = {
   event: { color: '#f97316', shape: 'torus', label: 'Timeline Event' },
   fir: { color: '#f97316', shape: 'torus', label: 'FIR / Legal Record' },
   case: { color: '#06b6d4', shape: 'torus', label: 'Case File' },
+  digital_identity: { color: '#06b6d4', shape: 'cylinder', label: 'Digital Identity' },
+  account: { color: '#eab308', shape: 'dodecahedron', label: 'Bank Account' },
 };
+
+function drawRoundRect(ctx, x, y, width, height, radius) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, width, height, radius);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+}
+
+/**
+ * Robust camera framing that calculates actual 3D bounding box from active node coordinates.
+ * Avoids upstream zoomToFit bugs that collapse camera distance to near-zero.
+ */
+function fitGraphToCamera(Graph, nodes, transitionMs = 800) {
+  if (!Graph || !nodes || nodes.length === 0) return;
+
+  const validNodes = nodes.filter(n => typeof n.x === 'number' && !isNaN(n.x) && isFinite(n.x));
+  if (validNodes.length === 0) {
+    const defaultDist = Math.max(280, Math.cbrt(nodes.length) * 100);
+    Graph.cameraPosition({ x: 0, y: 0, z: defaultDist }, { x: 0, y: 0, z: 0 }, transitionMs);
+    return;
+  }
+
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  for (const n of validNodes) {
+    if (n.x < minX) minX = n.x;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
+    if (n.z < minZ) minZ = n.z;
+    if (n.z > maxZ) maxZ = n.z;
+  }
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const cz = (minZ + maxZ) / 2;
+
+  let maxSpan = 0;
+  for (const n of validNodes) {
+    const dist = Math.hypot(n.x - cx, n.y - cy, n.z - cz);
+    if (dist > maxSpan) maxSpan = dist;
+  }
+
+  // Perspective camera with FOV 50deg: tan(25deg) = 0.4663
+  const requiredDist = (maxSpan + 30) / 0.4663;
+  const targetZ = Math.max(280, Math.min(1000, Math.round(requiredDist * 1.15)));
+
+  Graph.cameraPosition(
+    { x: cx, y: cy, z: cz + targetZ },
+    { x: cx, y: cy, z: cz },
+    transitionMs
+  );
+}
 
 /**
  * Creates high-performance 2D canvas sprite for 3D billboarded text labels
  */
 function createLabelSprite(text, subtext, color, isSelected, isKeyTarget) {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 384;
+  canvas.height = 96;
   const ctx = canvas.getContext('2d');
 
   // Background rounded pill
-  const bg = isSelected ? 'rgba(14, 25, 45, 0.95)' : isKeyTarget ? 'rgba(25, 18, 10, 0.92)' : 'rgba(7, 10, 18, 0.88)';
-  const border = isSelected ? '#00f2fe' : isKeyTarget ? '#f59e0b' : 'rgba(255, 255, 255, 0.2)';
-  const borderWidth = isSelected ? 4 : isKeyTarget ? 3 : 2;
+  const bg = isSelected ? 'rgba(10, 24, 48, 0.96)' : isKeyTarget ? 'rgba(32, 20, 8, 0.94)' : 'rgba(8, 14, 26, 0.92)';
+  const border = isSelected ? '#00f2fe' : isKeyTarget ? '#f59e0b' : (color || 'rgba(255, 255, 255, 0.4)');
+  const borderWidth = isSelected ? 4 : isKeyTarget ? 3.5 : 2;
 
   ctx.beginPath();
-  ctx.roundRect(10, 10, 492, 108, 20);
+  drawRoundRect(ctx, 4, 4, 376, 88, 14);
   ctx.fillStyle = bg;
   ctx.fill();
   ctx.lineWidth = borderWidth;
@@ -72,26 +140,28 @@ function createLabelSprite(text, subtext, color, isSelected, isKeyTarget) {
 
   // Draw type pill
   ctx.beginPath();
-  ctx.roundRect(24, 24, 120, 32, 8);
-  ctx.fillStyle = color;
+  drawRoundRect(ctx, 12, 14, 96, 28, 6);
+  ctx.fillStyle = color || '#38bdf8';
   ctx.fill();
 
-  ctx.font = 'bold 18px monospace';
+  ctx.font = 'bold 13px monospace';
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
-  ctx.fillText((subtext || 'ENTITY').toUpperCase().substring(0, 10), 84, 46);
+  const typeText = String(subtext || 'ENTITY').toUpperCase().substring(0, 9);
+  ctx.fillText(typeText, 60, 33);
 
   // Draw entity primary label
-  ctx.font = 'bold 30px sans-serif';
+  ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
-  const displayLabel = text.length > 22 ? text.substring(0, 20) + '...' : text;
-  ctx.fillText(displayLabel, 160, 48);
+  const rawText = String(text || 'Unknown').trim();
+  const displayLabel = rawText.length > 20 ? rawText.substring(0, 18) + '…' : rawText;
+  ctx.fillText(displayLabel, 118, 35);
 
-  // Status or sub-description
-  ctx.font = '20px monospace';
-  ctx.fillStyle = isSelected ? '#00f2fe' : '#94a3b8';
-  ctx.fillText(isSelected ? 'ACTIVE SELECTION' : isKeyTarget ? 'KEY TARGET // PRIORITY' : 'RECORD IDENTIFIER', 24, 94);
+  // Status or classification description
+  ctx.font = '14px monospace';
+  ctx.fillStyle = isSelected ? '#00f2fe' : isKeyTarget ? '#f59e0b' : '#94a3b8';
+  ctx.fillText(isSelected ? 'ACTIVE SELECTION' : isKeyTarget ? 'PRIMARY TARGET' : 'INVESTIGATION NODE', 14, 72);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter;
@@ -99,13 +169,14 @@ function createLabelSprite(text, subtext, color, isSelected, isKeyTarget) {
 
   const spriteMaterial = new THREE.SpriteMaterial({
     map: texture,
-    depthTest: false,
+    depthTest: true,
+    depthWrite: false,
     transparent: true,
   });
 
   const sprite = new THREE.Sprite(spriteMaterial);
-  const scaleMultiplier = isSelected ? 1.3 : isKeyTarget ? 1.15 : 1.0;
-  sprite.scale.set(24 * scaleMultiplier, 6 * scaleMultiplier, 1);
+  const scaleMultiplier = isSelected ? 1.25 : isKeyTarget ? 1.12 : 1.0;
+  sprite.scale.set(30 * scaleMultiplier, 7.5 * scaleMultiplier, 1);
   return sprite;
 }
 
@@ -146,6 +217,7 @@ export function KnowledgeGraphView() {
   const [timelineHUDOpen, setTimelineHUDOpen] = useState(true);
 
   const {
+    activeView,
     graphData,
     selectedEntityId,
     selectEntity,
@@ -232,7 +304,6 @@ export function KnowledgeGraphView() {
       `)
       .nodeThreeObject(node => {
         const isSelected = selectedEntityIdRef.current === node.id;
-        const isHovered = hoverNode?.id === node.id;
         const cfg = ENTITY_CONFIG[node.type] || ENTITY_CONFIG.person;
         const color = cfg.color;
 
@@ -240,12 +311,11 @@ export function KnowledgeGraphView() {
         const isKeyTarget =
           node.id === 'PER-SULTAN-01' ||
           node.id === 'PER-MUNSHI-02' ||
-          node.id.includes('BOSS') ||
-          node.id.includes('BRIDGE') ||
+          (typeof node.id === 'string' && (node.id.includes('BOSS') || node.id.includes('BRIDGE'))) ||
           node.attributes?.riskLevel === 'CRITICAL' ||
           node.attributes?.riskLevel === 'EXTREME';
 
-        let radius = isSelected ? 8.5 : isHovered ? 7.0 : isKeyTarget ? 7.5 : 5.0;
+        const radius = isSelected ? 8.0 : isKeyTarget ? 6.2 : 4.2;
 
         const group = new THREE.Group();
 
@@ -253,36 +323,36 @@ export function KnowledgeGraphView() {
         const geometry = createNodeGeometry(node.type, radius);
         const material = new THREE.MeshLambertMaterial({
           color: new THREE.Color(color),
-          emissive: new THREE.Color(isSelected ? '#00f2fe' : isHovered ? color : isKeyTarget ? '#f59e0b' : '#000000'),
-          emissiveIntensity: isSelected ? 0.7 : isHovered ? 0.4 : isKeyTarget ? 0.25 : 0.05,
-          roughness: 0.3,
-          transparent: true,
+          emissive: new THREE.Color(isSelected ? '#00f2fe' : isKeyTarget ? '#f59e0b' : color),
+          emissiveIntensity: isSelected ? 0.8 : isKeyTarget ? 0.45 : 0.25,
+          transparent: false,
           opacity: 1.0,
         });
         const mesh = new THREE.Mesh(geometry, material);
         group.add(mesh);
 
         // 2. Selection / Focus Halo Ring
-        const ringGeo = new THREE.RingGeometry(radius + 2, radius + 4, 32);
+        const ringGeo = new THREE.RingGeometry(radius + 1.4, radius + 3.0, 32);
         const ringMat = new THREE.MeshBasicMaterial({
-          color: new THREE.Color('#00f2fe'),
+          color: new THREE.Color(isSelected ? '#00f2fe' : '#f59e0b'),
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.9,
         });
         const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.visible = isSelected;
+        ring.visible = isSelected || isKeyTarget;
         group.add(ring);
 
         // 3. Named Node Label Sprite (Billboarded Canvas Text)
+        const nodeLabel = node.label || node.name || node.attributes?.alias || node.id;
         const labelSprite = createLabelSprite(
-          node.label || node.id,
+          nodeLabel,
           node.type,
           color,
           isSelected,
           isKeyTarget
         );
-        labelSprite.position.set(0, radius + 7, 0);
+        labelSprite.position.set(0, radius + 5.5, 0);
         group.add(labelSprite);
 
         // Cache object elements for instant temporal visual modulation
@@ -304,7 +374,7 @@ export function KnowledgeGraphView() {
 
         return group;
       })
-      .nodeRelSize(6)
+      .nodeRelSize(7)
       .linkWidth(link => {
         const srcId = link.source?.id || link.source;
         const tgtId = link.target?.id || link.target;
@@ -312,13 +382,13 @@ export function KnowledgeGraphView() {
 
         if (isFilteringActiveRef.current) {
           const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
-          if (focused) return 3.6;
+          if (focused) return 3.8;
           const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
-          if (!active) return 0.5;
-          return isConnected ? 2.8 : 1.6;
+          if (!active) return 0.6;
+          return isConnected ? 3.2 : 1.8;
         }
 
-        return isConnected ? 2.8 : 1.2;
+        return isConnected ? 3.2 : 1.6;
       })
       .linkColor(link => {
         const srcId = link.source?.id || link.source;
@@ -329,15 +399,16 @@ export function KnowledgeGraphView() {
           const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
           if (focused) return '#f59e0b';
           const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
-          if (!active) return 'rgba(255, 255, 255, 0.05)';
+          if (!active) return 'rgba(255, 255, 255, 0.08)';
           if (isConnected) return '#00f2fe';
-          return 'rgba(0, 240, 255, 0.6)';
+          return 'rgba(0, 240, 255, 0.7)';
         }
 
         if (isConnected) return '#00f2fe';
-        if (link.classification === 'FACT') return 'rgba(255, 255, 255, 0.3)';
-        return 'rgba(245, 158, 11, 0.45)';
+        if (link.classification === 'FACT') return 'rgba(0, 240, 255, 0.65)';
+        return 'rgba(245, 158, 11, 0.65)';
       })
+      .linkOpacity(0.7)
       .linkDirectionalParticles(link => {
         const srcId = link.source?.id || link.source;
         const tgtId = link.target?.id || link.target;
@@ -351,7 +422,7 @@ export function KnowledgeGraphView() {
           return isConnected ? 4 : 2;
         }
 
-        return isConnected ? 4 : 1;
+        return isConnected ? 4 : 2;
       })
       .linkDirectionalParticleWidth(link => {
         const srcId = link.source?.id || link.source;
@@ -362,15 +433,16 @@ export function KnowledgeGraphView() {
           const active = activeNodeIdsRef.current?.has(srcId) && activeNodeIdsRef.current?.has(tgtId);
           if (!active) return 0;
         }
-        return 1.8;
+        return 2.5;
       })
-      .linkDirectionalParticleSpeed(0.007)
+      .linkDirectionalParticleSpeed(0.008)
       .linkDirectionalParticleColor(link => {
         const srcId = link.source?.id || link.source;
         const tgtId = link.target?.id || link.target;
         const focused = focusedNodeIdsRef.current.has(srcId) && focusedNodeIdsRef.current.has(tgtId);
         return focused ? '#f59e0b' : '#00f2fe';
       })
+      .warmupTicks(30)
       .onNodeClick(node => {
         selectEntity(node.id);
         const distance = 85;
@@ -401,17 +473,31 @@ export function KnowledgeGraphView() {
 
     const handleResize = () => {
       if (containerRef.current && graphInstanceRef.current) {
-        graphInstanceRef.current
-          .width(containerRef.current.clientWidth)
-          .height(containerRef.current.clientHeight);
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (w > 0 && h > 0) {
+          graphInstanceRef.current.width(w).height(h);
+        }
       }
     };
     window.addEventListener('resize', handleResize);
 
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (graphInstanceRef.current) {
         graphInstanceRef.current._destructor?.();
+        graphInstanceRef.current = null;
+      }
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
       }
     };
   }, []);
@@ -420,9 +506,60 @@ export function KnowledgeGraphView() {
   useEffect(() => {
     if (graphInstanceRef.current && graphData) {
       nodeObjectsRef.current.clear();
-      graphInstanceRef.current.graphData(graphData);
+
+      // Deep-clone and index nodes to prevent ForceGraph3D from mutating original store state
+      const rawNodes = graphData.nodes || [];
+      const nodeMap = new Map();
+      const nodes = rawNodes.map(n => {
+        const copy = { ...n };
+        nodeMap.set(copy.id, copy);
+        return copy;
+      });
+
+      // Filter links to strictly those whose source and target exist in node set
+      const validLinks = (graphData.links || [])
+        .map(l => {
+          const s = typeof l.source === 'object' && l.source !== null ? l.source.id : l.source;
+          const t = typeof l.target === 'object' && l.target !== null ? l.target.id : l.target;
+          return { ...l, source: s, target: t };
+        })
+        .filter(l => nodeMap.has(l.source) && nodeMap.has(l.target));
+
+      const cleanData = { nodes, links: validLinks };
+
+      graphInstanceRef.current.graphData(cleanData);
+      graphInstanceRef.current.resumeAnimation?.();
+      graphInstanceRef.current.d3ReheatSimulation?.();
+
+      // Automatically frame camera so all nodes and relationships are in direct, crystal-clear view
+      if (cleanData.nodes.length > 0) {
+        setTimeout(() => {
+          if (graphInstanceRef.current) {
+            const liveNodes = graphInstanceRef.current.graphData()?.nodes || cleanData.nodes;
+            fitGraphToCamera(graphInstanceRef.current, liveNodes, 700);
+          }
+        }, 250);
+      }
     }
   }, [graphData]);
+
+  // Refresh and resize whenever user switches back to Graph view
+  useEffect(() => {
+    if (activeView === 'graph' && graphInstanceRef.current && containerRef.current) {
+      setTimeout(() => {
+        if (containerRef.current && graphInstanceRef.current) {
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight;
+          if (w > 0 && h > 0) {
+            graphInstanceRef.current.width(w).height(h);
+            graphInstanceRef.current.resumeAnimation?.();
+            graphInstanceRef.current.refresh();
+            graphInstanceRef.current.d3ReheatSimulation?.();
+          }
+        }
+      }, 50);
+    }
+  }, [activeView]);
 
   // Apply Analyst Physics Tuning to D3 Simulation
   useEffect(() => {
@@ -525,29 +662,39 @@ export function KnowledgeGraphView() {
   useEffect(() => {
     if (!graphInstanceRef.current) return;
 
-    if (selectedEntityId && graphData?.nodes) {
-      const node = graphData.nodes.find(n => n.id === selectedEntityId);
-      if (node && node.x !== undefined) {
-        const distance = 90;
+    if (selectedEntityId) {
+      const liveNodes = graphInstanceRef.current.graphData()?.nodes || [];
+      const node = liveNodes.find(n => n.id === selectedEntityId);
+      if (node && typeof node.x === 'number' && !isNaN(node.x)) {
+        const distance = 95;
         const hyp = Math.hypot(node.x, node.y, node.z) || 1;
         const distRatio = 1 + distance / hyp;
         graphInstanceRef.current.cameraPosition(
           { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node,
+          { x: node.x, y: node.y, z: node.z },
           1200
         );
       }
     }
-  }, [selectedEntityId, graphData]);
+  }, [selectedEntityId]);
 
   const handleRecenter = () => {
     if (graphInstanceRef.current) {
-      graphInstanceRef.current.zoomToFit(1000, 40);
+      const liveNodes = graphInstanceRef.current.graphData()?.nodes || [];
+      fitGraphToCamera(graphInstanceRef.current, liveNodes, 1000);
     }
   };
 
   const handleReheatSimulation = () => {
     if (graphInstanceRef.current) {
+      const currentData = graphInstanceRef.current.graphData();
+      if (currentData && currentData.nodes) {
+        currentData.nodes.forEach(n => {
+          n.vx = (n.vx || 0) + (Math.random() - 0.5) * 12;
+          n.vy = (n.vy || 0) + (Math.random() - 0.5) * 12;
+          n.vz = (n.vz || 0) + (Math.random() - 0.5) * 12;
+        });
+      }
       graphInstanceRef.current.d3ReheatSimulation();
     }
   };

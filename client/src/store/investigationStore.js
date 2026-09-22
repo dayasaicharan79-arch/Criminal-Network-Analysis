@@ -82,12 +82,22 @@ export const useInvestigationStore = create((set, get) => ({
   cinemaPlaying: false,
   cinemaStep: 0,
   isReportModalOpen: false,
+  reportConfig: { mode: 'case', targetEntityId: null },
 
   // ---------------------------------------------------------------------------
   // Setters & Simple Actions
   // ---------------------------------------------------------------------------
   setActiveView: (view) => set({ activeView: view }),
-  openReportModal: () => set({ isReportModalOpen: true }),
+  openReportModal: (config = {}) => set(state => ({
+    isReportModalOpen: true,
+    reportConfig: {
+      mode: config.mode || (config.entityId || state.selectedEntityId ? 'entity' : 'case'),
+      targetEntityId: config.entityId || state.selectedEntityId || null,
+    }
+  })),
+  setReportConfig: (patch) => set(state => ({
+    reportConfig: { ...state.reportConfig, ...patch }
+  })),
   closeReportModal: () => set({ isReportModalOpen: false }),
 
   setFilterMinConfidence: (val) => {
@@ -364,10 +374,17 @@ export const useInvestigationStore = create((set, get) => ({
         entityObj.relationships = relsRes.data || [];
       }
 
+      // Auto-sync associated primary location from entity or global geo dataset
+      const allGeoLocations = get().geoData?.locations || [];
+      const matchingGeoLoc = allGeoLocations.find(l => 
+        l.entityId === entityId || 
+        (Array.isArray(l.associatedEntityIds) && l.associatedEntityIds.includes(entityId))
+      );
+      const primaryLocId = entityObj?.locations?.[0]?.id || matchingGeoLoc?.id || null;
+
       set({
         selectedEntity: entityObj,
-        // Also auto-sync associated primary location if exists
-        selectedLocationId: entityObj?.locations?.[0]?.id || null,
+        selectedLocationId: primaryLocId,
       });
     } catch (err) {
       console.warn('Failed to fetch full entity details:', err);

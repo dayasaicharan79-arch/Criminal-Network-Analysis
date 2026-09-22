@@ -195,7 +195,8 @@ html, body, #root {
   .btn,
   .no-print,
   .constellation-report-modal-toolbar,
-  .constellation-report-toggles-bar {
+  .constellation-report-toggles-bar,
+  .constellation-report-mode-bar {
     display: none !important;
   }
 

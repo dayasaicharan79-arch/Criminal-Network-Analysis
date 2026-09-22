@@ -230,11 +230,15 @@ class DataStore {
     const loc = createLocation(data);
     this.locations.set(loc.id, loc);
 
-    if (loc.entityId) {
-      if (!this.indexLocationsByEntity.has(loc.entityId)) {
-        this.indexLocationsByEntity.set(loc.entityId, new Set());
+    const entityIds = loc.associatedEntityIds && loc.associatedEntityIds.length > 0
+      ? loc.associatedEntityIds
+      : (loc.entityId ? [loc.entityId] : []);
+
+    for (const entId of entityIds) {
+      if (!this.indexLocationsByEntity.has(entId)) {
+        this.indexLocationsByEntity.set(entId, new Set());
       }
-      this.indexLocationsByEntity.get(loc.entityId).add(loc.id);
+      this.indexLocationsByEntity.get(entId).add(loc.id);
     }
 
     if (loc.caseId) {
@@ -424,7 +428,10 @@ class DataStore {
     }
 
     const nodes = Array.from(nodeIds).map(id => this.entities.get(id)).filter(Boolean);
-    const links = Array.from(edgeIds).map(id => this.relationships.get(id)).filter(Boolean);
+    const validNodeIdSet = new Set(nodes.map(n => n.id));
+    const links = Array.from(edgeIds)
+      .map(id => this.relationships.get(id))
+      .filter(rel => rel && validNodeIdSet.has(rel.source) && validNodeIdSet.has(rel.target));
 
     return { nodes, links };
   }
@@ -537,5 +544,6 @@ class DataStore {
   }
 }
 
+export { DataStore };
 export const store = new DataStore();
 export default store;

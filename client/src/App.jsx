@@ -83,10 +83,10 @@ export function App() {
             </div>
           )}
 
-          <div style={{ width: '100%', height: '100%', display: activeView === 'graph' ? 'block' : 'none' }}>
+          <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0, display: activeView === 'graph' ? 'block' : 'none' }}>
             <KnowledgeGraphView />
           </div>
-          <div style={{ width: '100%', height: '100%', display: activeView === 'geo' ? 'block' : 'none' }}>
+          <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0, display: activeView === 'geo' ? 'block' : 'none' }}>
             <GeospatialView />
           </div>
           {activeView === 'timeline' && <TimelineView />}

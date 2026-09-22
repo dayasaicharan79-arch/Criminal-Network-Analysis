@@ -105,7 +105,7 @@ export class MoriartyEngine {
         computed,
         counterHypothesis: hypothesis,
         recommendedVerification,
-        weaknessesInProsecution: recommendedVerification,
+        weaknessesInProsecution: [recommendedVerification],
         classification: 'HYPOTHESIS',
       });
     }
@@ -165,7 +165,7 @@ export class MoriartyEngine {
         computed,
         counterHypothesis: hypothesis,
         recommendedVerification,
-        weaknessesInProsecution: recommendedVerification,
+        weaknessesInProsecution: [recommendedVerification],
         classification: 'HYPOTHESIS',
       });
     }
@@ -203,7 +203,7 @@ export class MoriartyEngine {
         computed,
         counterHypothesis: hypothesis,
         recommendedVerification,
-        weaknessesInProsecution: recommendedVerification,
+        weaknessesInProsecution: [recommendedVerification],
         classification: 'HYPOTHESIS',
       });
     }
@@ -244,7 +244,7 @@ export class MoriartyEngine {
         computed,
         counterHypothesis: hypothesis,
         recommendedVerification,
-        weaknessesInProsecution: recommendedVerification,
+        weaknessesInProsecution: [recommendedVerification],
         classification: 'HYPOTHESIS',
       });
     }
@@ -280,7 +280,7 @@ export class MoriartyEngine {
         computed,
         counterHypothesis: hypothesis,
         recommendedVerification,
-        weaknessesInProsecution: recommendedVerification,
+        weaknessesInProsecution: [recommendedVerification],
         classification: 'HYPOTHESIS',
       });
     }

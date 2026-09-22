@@ -16,6 +16,7 @@ import {
   X,
   AlertTriangle,
   Fingerprint,
+  Printer,
 } from 'lucide-react';
 
 export function EntityDetailPanel() {
@@ -28,6 +29,7 @@ export function EntityDetailPanel() {
     selectLocation,
     selectEvent,
     selectEvidence,
+    openReportModal,
   } = useInvestigationStore();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'relationships' | 'timeline' | 'geo' | 'evidence'
@@ -141,6 +143,17 @@ export function EntityDetailPanel() {
           </button>
           <button
             onClick={() => {
+              setActiveView('geo');
+            }}
+            className="btn btn-ghost"
+            style={{ flex: 1, padding: '6px 8px', fontSize: '11px' }}
+            title="Focus entity on 3D Globe"
+          >
+            <Globe size={13} color="var(--accent-cyan)" />
+            <span>Globe</span>
+          </button>
+          <button
+            onClick={() => {
               setActiveView('sherlock');
             }}
             className="btn btn-ghost"
@@ -149,6 +162,15 @@ export function EntityDetailPanel() {
           >
             <Bot size={13} color="var(--accent-purple)" />
             <span>Sherlock</span>
+          </button>
+          <button
+            onClick={() => openReportModal({ mode: 'entity', entityId: selectedEntity.id })}
+            className="btn btn-ghost"
+            style={{ flex: 1, padding: '6px 8px', fontSize: '11px' }}
+            title="Print Intelligence Profile for this entity"
+          >
+            <Printer size={13} color="var(--accent-gold)" />
+            <span>Print Dossier</span>
           </button>
         </div>
 

@@ -54,6 +54,9 @@ export function createLocation(data) {
     country: data.country || 'India',
     timestamp: data.timestamp || null,
     entityId: data.entityId || null,
+    associatedEntityIds: Array.isArray(data.associatedEntityIds)
+      ? [...new Set(data.associatedEntityIds)]
+      : (data.entityId ? [data.entityId] : []),
     caseId: data.caseId || null,
     eventId: data.eventId || null,
     locationType: data.locationType || 'OPERATIONAL_SITE', // RESIDENCE | OPERATIONAL_SITE | MEETING_POINT | TRANSIT_HUB | FINANCIAL_INSTITUTION
