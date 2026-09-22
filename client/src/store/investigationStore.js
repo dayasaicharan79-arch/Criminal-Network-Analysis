@@ -113,7 +113,13 @@ export const useInvestigationStore = create((set, get) => ({
   // Graph Physics Actions
   // ---------------------------------------------------------------------------
   setGraphPhysics: (patch) => {
-    set(state => ({ graphPhysics: { ...state.graphPhysics, ...patch } }));
+    const fullPatch = { ...patch };
+    if (fullPatch.velocityDecay !== undefined && fullPatch.damping === undefined) {
+      fullPatch.damping = fullPatch.velocityDecay;
+    } else if (fullPatch.damping !== undefined && fullPatch.velocityDecay === undefined) {
+      fullPatch.velocityDecay = fullPatch.damping;
+    }
+    set(state => ({ graphPhysics: { ...state.graphPhysics, ...fullPatch } }));
   },
 
   resetGraphPhysics: () => {

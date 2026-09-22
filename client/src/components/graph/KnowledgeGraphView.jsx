@@ -444,7 +444,7 @@ export function KnowledgeGraphView() {
 
     // 4. Simulation Damping / Velocity Decay
     if (typeof Graph.d3VelocityDecay === 'function') {
-      Graph.d3VelocityDecay(graphPhysics.damping);
+      Graph.d3VelocityDecay(graphPhysics.velocityDecay ?? graphPhysics.damping);
     }
 
     // 5. Community / Clustering Anchors

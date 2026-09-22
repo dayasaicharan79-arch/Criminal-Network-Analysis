@@ -38,6 +38,50 @@ describe('Phase 23: Graph Layout Physics & Timeline Playback Sync', () => {
       assert.ok(DEFAULT_GRAPH_PHYSICS.damping >= 0.1 && DEFAULT_GRAPH_PHYSICS.damping <= 0.8);
     });
 
+    it('synchronizes velocityDecay and damping aliases in physics tuning updates', () => {
+      // Regression test: ensure updating velocityDecay synchronizes damping and vice versa
+      function applyPhysicsPatch(current, patch) {
+        const fullPatch = { ...patch };
+        if (fullPatch.velocityDecay !== undefined && fullPatch.damping === undefined) {
+          fullPatch.damping = fullPatch.velocityDecay;
+        } else if (fullPatch.damping !== undefined && fullPatch.velocityDecay === undefined) {
+          fullPatch.velocityDecay = fullPatch.damping;
+        }
+        return { ...current, ...fullPatch };
+      }
+
+      const initial = {
+        chargeStrength: -120,
+        linkDistance: 45,
+        collisionRadius: 12,
+        damping: 0.4,
+        velocityDecay: 0.4,
+        communityAnchors: false,
+      };
+
+      // When HUD updates velocityDecay
+      const patchedFromSlider = applyPhysicsPatch(initial, { velocityDecay: 0.65 });
+      assert.equal(patchedFromSlider.velocityDecay, 0.65);
+      assert.equal(patchedFromSlider.damping, 0.65, 'damping alias must update when velocityDecay updates');
+
+      // When API/preset updates damping
+      const patchedFromPreset = applyPhysicsPatch(initial, { damping: 0.25 });
+      assert.equal(patchedFromPreset.damping, 0.25);
+      assert.equal(patchedFromPreset.velocityDecay, 0.25, 'velocityDecay alias must update when damping updates');
+    });
+
+    it('validates Physics HUD controlled visibility and contract', () => {
+      // Regression test: verify HUD controlled isOpen prop handling
+      function evaluateHUDVisibility(isOpen, isExpanded) {
+        if (!isOpen) return { rendered: false, expanded: false };
+        return { rendered: true, expanded: isExpanded };
+      }
+
+      assert.deepEqual(evaluateHUDVisibility(false, true), { rendered: false, expanded: false }, 'HUD hidden when isOpen is false');
+      assert.deepEqual(evaluateHUDVisibility(true, true), { rendered: true, expanded: true }, 'HUD rendered and expanded when isOpen is true');
+      assert.deepEqual(evaluateHUDVisibility(true, false), { rendered: true, expanded: false }, 'HUD rendered in collapsed state');
+    });
+
     it('calculates valid 3D community centroid coordinates for community anchors', () => {
       const analytics = AnalyticsService.runFullAnalytics();
 

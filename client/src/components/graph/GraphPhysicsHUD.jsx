@@ -20,11 +20,14 @@ import {
   Activity,
   Boxes,
   Zap,
+  X,
 } from 'lucide-react';
 
-export function GraphPhysicsHUD({ onReheat }) {
+export function GraphPhysicsHUD({ isOpen = true, onClose, onReheat }) {
   const { graphPhysics, setGraphPhysics, resetGraphPhysics } = useInvestigationStore();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  if (!isOpen) return null;
 
   const handleSliderChange = (key, value) => {
     setGraphPhysics({ [key]: value });
@@ -42,9 +45,9 @@ export function GraphPhysicsHUD({ onReheat }) {
         position: 'absolute',
         top: '16px',
         right: '16px',
-        zIndex: 15,
+        zIndex: 25,
         maxWidth: '320px',
-        width: isOpen ? '300px' : 'auto',
+        width: isExpanded ? '300px' : 'auto',
       }}
     >
       <div
@@ -57,32 +60,50 @@ export function GraphPhysicsHUD({ onReheat }) {
       >
         {/* Header Toggle */}
         <div
-          onClick={() => setIsOpen(!isOpen)}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '8px',
-            cursor: 'pointer',
             userSelect: 'none',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+          <div
+            onClick={() => setIsExpanded(!isExpanded)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--accent-cyan)', cursor: 'pointer', flex: 1 }}
+          >
             <Sliders size={13} />
             <span>GRAPH PHYSICS & CLUSTERING</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {graphPhysics.communityAnchors && (
               <span className="badge badge-purple" style={{ fontSize: '8px', padding: '1px 4px' }}>
                 CLUSTERED
               </span>
             )}
-            {isOpen ? <ChevronUp size={13} color="var(--text-muted)" /> : <ChevronDown size={13} color="var(--text-muted)" />}
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}
+              title={isExpanded ? 'Collapse controls' : 'Expand controls'}
+            >
+              {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                title="Close Physics HUD"
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Collapsible Tuning Controls */}
-        {isOpen && (
+        {isExpanded && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
             {/* 1. Charge Repulsion */}
             <div>
