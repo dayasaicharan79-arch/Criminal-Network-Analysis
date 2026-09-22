@@ -6,6 +6,170 @@ import { store } from '../data/store.js';
 
 export const geoRouter = Router();
 
+/**
+ * Derives dynamic inter-city transit corridors and value flow arcs
+ * from active case relationships and sequential movement events.
+ */
+export function buildDynamicTransitArcs({ locations = [], caseId = null, entityId = null }) {
+  const arcs = [];
+  const arcKeySet = new Set();
+
+  // Create fast lookup of entityId -> locations
+  const entityLocationMap = new Map();
+  for (const loc of locations) {
+    if (loc.entityId && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+      if (!entityLocationMap.has(loc.entityId)) {
+        entityLocationMap.set(loc.entityId, []);
+      }
+      entityLocationMap.get(loc.entityId).push(loc);
+    }
+  }
+
+  // Get active relationships
+  let relationships = [];
+  if (entityId) {
+    relationships = store.getRelationshipsByEntity(entityId);
+  } else if (caseId) {
+    relationships = store.getRelationshipsByCase(caseId);
+  } else {
+    relationships = store.getAllRelationships();
+  }
+
+  // 1. Cross-City Relationship Corridors (Hawala, Physical Haulage, Contraband, Comms)
+  for (const rel of relationships) {
+    const srcLocs = entityLocationMap.get(rel.source) || store.getLocationsByEntity(rel.source);
+    const tgtLocs = entityLocationMap.get(rel.target) || store.getLocationsByEntity(rel.target);
+
+    if (srcLocs && srcLocs.length > 0 && tgtLocs && tgtLocs.length > 0) {
+      const srcLoc = srcLocs[0];
+      const tgtLoc = tgtLocs[0];
+
+      const latDiff = Math.abs(srcLoc.latitude - tgtLoc.latitude);
+      const lngDiff = Math.abs(srcLoc.longitude - tgtLoc.longitude);
+      const isCrossCity = latDiff > 0.05 || lngDiff > 0.05 || (srcLoc.city && tgtLoc.city && srcLoc.city.toLowerCase() !== tgtLoc.city.toLowerCase());
+
+      if (isCrossCity) {
+        const canonicalKey = `${srcLoc.city || srcLoc.name}::${tgtLoc.city || tgtLoc.name}::${rel.type}`;
+        if (!arcKeySet.has(canonicalKey)) {
+          arcKeySet.add(canonicalKey);
+
+          const srcEntity = store.getEntity(rel.source);
+          const tgtEntity = store.getEntity(rel.target);
+          const srcLabel = srcEntity ? srcEntity.label : rel.source;
+          const tgtLabel = tgtEntity ? tgtEntity.label : rel.target;
+
+          let color = '#3b82f6';
+          let arcType = rel.type || 'CORRIDOR';
+
+          const relUpper = (rel.type || '').toUpperCase();
+          if (['TRANSFERRED_TO', 'TRANSACTED_WITH', 'FINANCIALLY_LINKED', 'HAWALA'].some(k => relUpper.includes(k))) {
+            color = '#00f2fe';
+            arcType = 'HAWALA_ROUTING';
+          } else if (['COMMUNICATED_WITH', 'CALL', 'VOIP', 'RELAY', 'SMS'].some(k => relUpper.includes(k))) {
+            color = '#a855f7';
+            arcType = 'CYBER_COMMUNICATION';
+          } else if (['SUPPLIED_TO', 'SMUGGLED', 'CONTRABAND'].some(k => relUpper.includes(k))) {
+            color = '#ef4444';
+            arcType = 'CONTRABAND_CORRIDOR';
+          } else if (['TRANSPORTED_TO', 'SHIPPED_TO', 'COURIER', 'VEHICLE'].some(k => relUpper.includes(k))) {
+            color = '#f59e0b';
+            arcType = 'PHYSICAL_HAULAGE';
+          }
+
+          arcs.push({
+            id: `ARC-REL-${rel.id}`,
+            name: `${srcLabel} ➔ ${tgtLabel} (${arcType.replace(/_/g, ' ')})`,
+            fromCity: srcLoc.city || srcLoc.name || 'Origin',
+            toCity: tgtLoc.city || tgtLoc.name || 'Destination',
+            startLat: srcLoc.latitude,
+            startLng: srcLoc.longitude,
+            endLat: tgtLoc.latitude,
+            endLng: tgtLoc.longitude,
+            fromLat: srcLoc.latitude,
+            fromLng: srcLoc.longitude,
+            toLat: tgtLoc.latitude,
+            toLng: tgtLoc.longitude,
+            color,
+            type: arcType,
+            confidence: rel.confidence || 0.9,
+            sourceEntityId: rel.source,
+            targetEntityId: rel.target,
+            entitiesInvolved: [rel.source, rel.target, srcLabel, tgtLabel],
+            relationshipId: rel.id,
+            metric: rel.metadata?.occurrenceCount || 1,
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Sequential Movement / Event Corridors
+  let events = [];
+  if (entityId) {
+    events = store.getEventsByEntity(entityId);
+  } else if (caseId) {
+    events = store.getEventsByCase(caseId);
+  } else {
+    events = store.getAllEvents();
+  }
+
+  const entityEventsMap = new Map();
+  for (const ev of events) {
+    for (const entId of (ev.entityIds || [])) {
+      if (!entityEventsMap.has(entId)) {
+        entityEventsMap.set(entId, []);
+      }
+      entityEventsMap.get(entId).push(ev);
+    }
+  }
+
+  for (const [entId, entEvts] of entityEventsMap.entries()) {
+    if (entEvts.length < 2) continue;
+    const sorted = [...entEvts].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const ev1 = sorted[i];
+      const ev2 = sorted[i + 1];
+
+      const loc1 = ev1.locationId ? store.getLocation(ev1.locationId) : null;
+      const loc2 = ev2.locationId ? store.getLocation(ev2.locationId) : null;
+
+      if (loc1 && loc2 && loc1.id !== loc2.id && (loc1.latitude !== loc2.latitude || loc1.longitude !== loc2.longitude)) {
+        const canonicalKey = `TRANSIT::${loc1.city}::${loc2.city}::${entId}`;
+        if (!arcKeySet.has(canonicalKey)) {
+          arcKeySet.add(canonicalKey);
+          const entity = store.getEntity(entId);
+          const entLabel = entity ? entity.label : entId;
+
+          arcs.push({
+            id: `ARC-EVT-${ev1.id}-${ev2.id}`,
+            name: `${entLabel} Movement (${loc1.city || 'Site A'} ➔ ${loc2.city || 'Site B'})`,
+            fromCity: loc1.city || loc1.name || 'Origin',
+            toCity: loc2.city || loc2.name || 'Destination',
+            startLat: loc1.latitude,
+            startLng: loc1.longitude,
+            endLat: loc2.latitude,
+            endLng: loc2.longitude,
+            fromLat: loc1.latitude,
+            fromLng: loc1.longitude,
+            toLat: loc2.latitude,
+            toLng: loc2.longitude,
+            color: '#10b981',
+            type: 'PHYSICAL_TRANSIT',
+            confidence: 0.92,
+            sourceEntityId: entId,
+            targetEntityId: entId,
+            entitiesInvolved: [entId, entLabel],
+            metric: 1,
+          });
+        }
+      }
+    }
+  }
+
+  return arcs;
+}
+
 // GET /api/geo
 geoRouter.get('/', (req, res) => {
   const { caseId, entityId, city, locationType } = req.query;
@@ -27,66 +191,8 @@ geoRouter.get('/', (req, res) => {
     locations = locations.filter(l => l.locationType === locationType);
   }
 
-  // Generate inter-city analytical arcs (e.g., Dubai -> Mumbai -> Delhi -> Kolkata)
-  // Derived from actual transactions and transport routes in the case
-  const arcs = [
-    {
-      id: 'ARC-01',
-      name: 'Transnational Hawala Value Flow (Dubai -> Mumbai)',
-      fromCity: 'Dubai',
-      toCity: 'Mumbai',
-      startLat: 25.0784,
-      startLng: 55.1481,
-      endLat: 18.9515,
-      endLng: 72.8315,
-      color: '#00f2fe',
-      type: 'HAWALA_ROUTING',
-      confidence: 0.96,
-      amount: '₹14.5 Crores',
-    },
-    {
-      id: 'ARC-02',
-      name: 'Cash Consignment Armored Transit (Mumbai -> Delhi)',
-      fromCity: 'Mumbai',
-      toCity: 'New Delhi',
-      startLat: 18.9515,
-      startLng: 72.8315,
-      endLat: 28.5714,
-      endLng: 77.2219,
-      color: '#f59e0b',
-      type: 'PHYSICAL_HAULAGE',
-      confidence: 0.94,
-      vehicle: 'DL-10-CA-4491 (Scorpio)',
-    },
-    {
-      id: 'ARC-03',
-      name: 'Contraband Coastal Shipment (Kandla -> Kolkata)',
-      fromCity: 'Kandla',
-      toCity: 'Kolkata',
-      startLat: 23.0033,
-      startLng: 70.2186,
-      endLat: 22.5358,
-      endLng: 88.3182,
-      color: '#ef4444',
-      type: 'CONTRABAND_CORRIDOR',
-      confidence: 0.93,
-      vehicle: 'GJ-12-BT-9104 (Container Hauler)',
-    },
-    {
-      id: 'ARC-04',
-      name: 'VoIP & Crypto Mixed Node Hop (Bengaluru -> Hyderabad)',
-      fromCity: 'Bengaluru',
-      toCity: 'Hyderabad',
-      startLat: 12.9784,
-      startLng: 77.6408,
-      endLat: 17.4474,
-      endLng: 78.3762,
-      color: '#a855f7',
-      type: 'CYBER_COMMUNICATION',
-      confidence: 0.90,
-      protocol: 'Matrix Encrypted Relay',
-    },
-  ];
+  // Dynamically derive transit corridors and inter-city value arcs
+  const arcs = buildDynamicTransitArcs({ locations, caseId, entityId });
 
   res.json({
     success: true,

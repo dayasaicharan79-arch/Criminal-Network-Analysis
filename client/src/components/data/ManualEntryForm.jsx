@@ -60,9 +60,24 @@ export function ManualEntryForm() {
     // Transaction
     amount: '',
     currency: 'INR',
+    transactionType: 'HAWALA_MIRROR',
+    transactionRef: '',
+    sender: '',
+    receiver: '',
     // Evidence
     evidenceType: 'DOCUMENT',
     hash: '',
+    // Organization
+    registrationNo: '',
+    jurisdiction: '',
+    keyPersons: '',
+    legalStatus: 'ACTIVE',
+    // FIR
+    firNumber: '',
+    policeStation: '',
+    sectionsOfLaw: '',
+    investigatingOfficer: '',
+    filingDate: new Date().toISOString().substring(0, 10),
   });
 
   const [validationResult, setValidationResult] = useState(null);
@@ -99,8 +114,21 @@ export function ManualEntryForm() {
       timestamp: new Date().toISOString().substring(0, 16),
       amount: '',
       currency: 'INR',
+      transactionType: 'HAWALA_MIRROR',
+      transactionRef: '',
+      sender: '',
+      receiver: '',
       evidenceType: 'DOCUMENT',
       hash: '',
+      registrationNo: '',
+      jurisdiction: '',
+      keyPersons: '',
+      legalStatus: 'ACTIVE',
+      firNumber: '',
+      policeStation: '',
+      sectionsOfLaw: '',
+      investigatingOfficer: '',
+      filingDate: new Date().toISOString().substring(0, 10),
     });
   };
 
@@ -166,9 +194,32 @@ export function ManualEntryForm() {
     if (formData.imei) attrs.imei = formData.imei;
     if (formData.plate) attrs.plate = formData.plate;
     if (formData.riskLevel) attrs.riskLevel = formData.riskLevel;
-    if (formData.amount) {
-      attrs.amount = formData.amount;
-      attrs.currency = formData.currency;
+
+    // Organization attributes
+    if (selectedType === ENTITY_TYPES.ORGANIZATION) {
+      if (formData.registrationNo) attrs.registrationNo = formData.registrationNo;
+      if (formData.jurisdiction) attrs.jurisdiction = formData.jurisdiction;
+      if (formData.keyPersons) attrs.keyPersons = formData.keyPersons;
+      if (formData.legalStatus) attrs.legalStatus = formData.legalStatus;
+    }
+
+    // Transaction attributes
+    if (selectedType === ENTITY_TYPES.TRANSACTION) {
+      if (formData.amount) attrs.amount = formData.amount;
+      if (formData.currency) attrs.currency = formData.currency;
+      if (formData.transactionType) attrs.transactionType = formData.transactionType;
+      if (formData.transactionRef) attrs.transactionRef = formData.transactionRef;
+      if (formData.sender) attrs.sender = formData.sender;
+      if (formData.receiver) attrs.receiver = formData.receiver;
+    }
+
+    // FIR attributes
+    if (selectedType === ENTITY_TYPES.FIR) {
+      if (formData.firNumber) attrs.firNumber = formData.firNumber;
+      if (formData.policeStation) attrs.policeStation = formData.policeStation;
+      if (formData.sectionsOfLaw) attrs.sectionsOfLaw = formData.sectionsOfLaw;
+      if (formData.investigatingOfficer) attrs.investigatingOfficer = formData.investigatingOfficer;
+      if (formData.filingDate) attrs.filingDate = formData.filingDate;
     }
 
     return {
@@ -704,6 +755,308 @@ export function ManualEntryForm() {
                       fontSize: '13px',
                     }}
                   />
+                </div>
+              </>
+            )}
+
+            {/* Specific to Organization */}
+            {selectedType === ENTITY_TYPES.ORGANIZATION && (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Registration No / CIN / Trade License
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. U74999DL2018PTC123456 or DMCC-98214"
+                    value={formData.registrationNo}
+                    onChange={e => handleFieldChange('registrationNo', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Jurisdiction / Incorporation Authority
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. MCA Delhi / DMCC Dubai, UAE"
+                    value={formData.jurisdiction}
+                    onChange={e => handleFieldChange('jurisdiction', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Key Persons / Directors / Signatories
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Tariq Mansoor (Managing Director)"
+                    value={formData.keyPersons}
+                    onChange={e => handleFieldChange('keyPersons', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Corporate / Operational Status
+                  </label>
+                  <select
+                    value={formData.legalStatus}
+                    onChange={e => handleFieldChange('legalStatus', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: '#07090e',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <option value="ACTIVE">ACTIVE / OPERATING</option>
+                    <option value="SUSPECTED_SHELL">SUSPECTED SHELL COMPANY</option>
+                    <option value="HAWALA_FRONT">IDENTIFIED HAWALA FRONT</option>
+                    <option value="UNDER_AUDIT">UNDER REGULATORY AUDIT</option>
+                    <option value="DEREGISTERED">DEREGISTERED / STRUCK OFF</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Specific to Transaction */}
+            {selectedType === ENTITY_TYPES.TRANSACTION && (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Transaction Amount
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 14,50,00,000 or 500,000"
+                    value={formData.amount}
+                    onChange={e => handleFieldChange('amount', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Currency & Channel Mode
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <select
+                      value={formData.currency}
+                      onChange={e => handleFieldChange('currency', e.target.value)}
+                      style={{
+                        width: '90px',
+                        background: '#07090e',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 10px',
+                        color: '#fff',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <option value="INR">INR (₹)</option>
+                      <option value="AED">AED (د.إ)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="USDT">USDT</option>
+                    </select>
+                    <select
+                      value={formData.transactionType}
+                      onChange={e => handleFieldChange('transactionType', e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: '#07090e',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 10px',
+                        color: '#fff',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <option value="HAWALA_MIRROR">HAWALA MIRROR / CHIT</option>
+                      <option value="BANK_WIRE">NEFT / RTGS / WIRE</option>
+                      <option value="CRYPTO_USDT">CRYPTO OTC / TRC-20</option>
+                      <option value="CASH_HAUL">PHYSICAL CASH CONSIGNMENT</option>
+                      <option value="TRADE_ESCROW">TRADE INVOICE / ESCROW</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Reference Number (UTR / TxHash / Chit Code)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. UTR-HDFC-9921448 or CHIT-VORTEX-77"
+                    value={formData.transactionRef}
+                    onChange={e => handleFieldChange('transactionRef', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Originator / Counterparty Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Dubai Bullion Escrow ➔ Mumbai Zaveri Bazaar"
+                    value={formData.sender}
+                    onChange={e => handleFieldChange('sender', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Specific to FIR */}
+            {selectedType === ENTITY_TYPES.FIR && (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    FIR Number & Year *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. FIR No. 104/2024"
+                    value={formData.firNumber}
+                    onChange={e => handleFieldChange('firNumber', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Police Station / Jurisdictional Unit *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Special Cell PS, Lodhi Colony"
+                    value={formData.policeStation}
+                    onChange={e => handleFieldChange('policeStation', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Sections of Law Invoked
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 120B, 420 IPC, 3/4 PMLA, 25 Arms Act"
+                    value={formData.sectionsOfLaw}
+                    onChange={e => handleFieldChange('sectionsOfLaw', e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Investigating Officer (IO) & Filing Date
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input
+                      type="text"
+                      placeholder="IO Name & Rank"
+                      value={formData.investigatingOfficer}
+                      onChange={e => handleFieldChange('investigatingOfficer', e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: 'rgba(0,0,0,0.4)',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                        color: '#fff',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <input
+                      type="date"
+                      value={formData.filingDate}
+                      onChange={e => handleFieldChange('filingDate', e.target.value)}
+                      style={{
+                        width: '130px',
+                        background: '#07090e',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 10px',
+                        color: '#fff',
+                        fontSize: '12px',
+                      }}
+                    />
+                  </div>
                 </div>
               </>
             )}

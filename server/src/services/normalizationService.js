@@ -166,8 +166,13 @@ export function normalizeEvidence(raw) {
   const ev = { ...raw };
   ev.id = ev.id ? String(ev.id).trim() : null;
   ev.title = normalizeLabel(ev.title);
-  ev.hash = ev.hash ? String(ev.hash).toLowerCase().trim() : null;
-  ev.classification = ev.classification ? String(ev.classification).toUpperCase().trim() : 'DOCUMENTARY';
+  if (ev.evidenceType) {
+    ev.evidenceType = String(ev.evidenceType).toUpperCase().trim();
+  } else {
+    ev.evidenceType = 'DOCUMENT';
+  }
+  ev.hash = ev.hash ? String(ev.hash).trim() : null;
+  ev.classification = ev.classification ? String(ev.classification).toUpperCase().trim() : 'FACT';
   ev.confidence = typeof ev.confidence === 'number' ? Math.max(0, Math.min(1, ev.confidence)) : 1.0;
   return ev;
 }

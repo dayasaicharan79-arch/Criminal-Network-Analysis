@@ -40,6 +40,7 @@ export function FileImportStudio() {
   const [fileMeta, setFileMeta] = useState(null);
   const [parsedData, setParsedData] = useState(null);
   const [fieldMapping, setFieldMapping] = useState({});
+  const [registerAsExhibit, setRegisterAsExhibit] = useState(true);
   const [parsing, setParsing] = useState(false);
   const [validating, setValidating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +52,7 @@ export function FileImportStudio() {
     setFileMeta(null);
     setParsedData(null);
     setFieldMapping({});
+    setRegisterAsExhibit(true);
     setValidationResult(null);
     setStatusMessage(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -73,6 +75,7 @@ export function FileImportStudio() {
         format: parsed.format,
         rowCount: parsed.rows.length,
         colCount: parsed.headers.length,
+        fileHash: parsed.fileHash,
       });
 
       setParsedData(parsed);
@@ -155,15 +158,19 @@ export function FileImportStudio() {
         mapping: fieldMapping,
         caseId: activeCaseId,
         filename: fileMeta.name,
+        fileHash: fileMeta.fileHash || parsedData.fileHash,
+        fileSize: fileMeta.size,
+        registerSourceFileAsEvidence: registerAsExhibit,
       });
 
       if (
         payload.entities.length === 0 &&
         payload.locations.length === 0 &&
         payload.events.length === 0 &&
-        payload.relationships.length === 0
+        payload.relationships.length === 0 &&
+        payload.evidence.length === 0
       ) {
-        throw new Error('No mapped records generated. Please map at least one column to Entity Label, Location, Event, or Relationship.');
+        throw new Error('No mapped records generated. Please map at least one column to Entity, Location, Event, Relationship, or Evidence.');
       }
 
       const res = await api.validateIngest(payload);
@@ -199,6 +206,9 @@ export function FileImportStudio() {
         mapping: fieldMapping,
         caseId: activeCaseId,
         filename: fileMeta.name,
+        fileHash: fileMeta.fileHash || parsedData.fileHash,
+        fileSize: fileMeta.size,
+        registerSourceFileAsEvidence: registerAsExhibit,
       });
 
       const res = await api.ingest(payload);
@@ -530,6 +540,41 @@ export function FileImportStudio() {
             </div>
           </div>
 
+          {/* Whole-File Evidence Exhibit Registration Option */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            background: 'rgba(0, 242, 254, 0.05)',
+            border: '1px solid rgba(0, 242, 254, 0.2)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <ShieldCheck size={18} color="var(--accent-cyan)" />
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Register Source File as Evidence Exhibit
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Generates an immutable Evidence Locker record retaining binary SHA-256 hash, provenance, and custody chain.
+                </div>
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={registerAsExhibit}
+                onChange={e => setRegisterAsExhibit(e.target.checked)}
+                style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                {registerAsExhibit ? 'Enabled' : 'Disabled'}
+              </span>
+            </label>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button onClick={handleReset} className="btn btn-ghost" style={{ padding: '8px 14px', fontSize: '12px' }}>
               Cancel
@@ -558,11 +603,12 @@ export function FileImportStudio() {
             <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-emerald)', marginBottom: '8px' }}>
               Ingestion Pipeline Validation Report
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
               <div>Submitted: <strong>{validationResult.summary.submitted}</strong></div>
               <div>Accepted: <strong style={{ color: 'var(--accent-emerald)' }}>{validationResult.summary.accepted}</strong></div>
               <div>Rejected: <strong style={{ color: validationResult.summary.rejected > 0 ? 'var(--accent-crimson)' : 'var(--text-muted)' }}>{validationResult.summary.rejected}</strong></div>
               <div>Entities Merged: <strong style={{ color: 'var(--accent-cyan)' }}>{validationResult.summary.entitiesMerged}</strong></div>
+              <div>Evidence Items: <strong style={{ color: 'var(--accent-gold)' }}>{validationResult.summary.evidenceCreated || 0}</strong></div>
             </div>
 
             {/* Rejections if any */}

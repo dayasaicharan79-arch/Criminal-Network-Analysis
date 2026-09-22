@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<intelligenceReport case="CASE-2024-VORTEX">
+  <target name="Tariq Mansoor" alias="Sultan">
+    <role>Hawala Kingpin</role>
+    <phone>+971501234567</phone>
+    <city>Dubai</city>
+    <classification>FACT</classification>
+  </target>
+  <target name="Karan Verma" alias="Munshi">
+    <role>Chartered Accountant</role>
+    <phone>+919811044219</phone>
+    <city>Mumbai</city>
+    <classification>FACT</classification>
+  </target>
+  <target name="Farhan Baig" alias="Driver">
+    <role>Logistics Courier</role>
+    <phone>+919920155182</phone>
+    <city>Kolkata</city>
+    <classification>FACT</classification>
+  </target>
+</intelligenceReport>

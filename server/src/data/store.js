@@ -160,6 +160,49 @@ class DataStore {
     return rel;
   }
 
+  updateRelationship(id, updates = {}) {
+    const existing = this.relationships.get(id);
+    if (!existing) return null;
+
+    const mergedCaseIds = Array.isArray(updates.caseIds)
+      ? [...new Set([...existing.caseIds, ...updates.caseIds])]
+      : existing.caseIds;
+
+    const mergedEvidenceIds = Array.isArray(updates.evidenceIds)
+      ? [...new Set([...(existing.evidenceIds || []), ...updates.evidenceIds])]
+      : (existing.evidenceIds || []);
+
+    const updated = {
+      ...existing,
+      confidence: updates.confidence !== undefined
+        ? Math.max(existing.confidence || 0, updates.confidence)
+        : existing.confidence,
+      caseIds: mergedCaseIds,
+      evidenceIds: mergedEvidenceIds,
+      provenance: updates.provenance || existing.provenance,
+      classification: updates.classification || existing.classification,
+      timestamp: updates.timestamp || existing.timestamp,
+      metadata: {
+        ...(existing.metadata || {}),
+        ...(updates.metadata || {}),
+        occurrenceCount: (existing.metadata?.occurrenceCount || 1) + (updates.metadata?.occurrenceCount || 1),
+        lastActivityTimestamp: updates.timestamp || existing.timestamp,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.relationships.set(id, updated);
+
+    for (const caseId of mergedCaseIds) {
+      if (!this.indexRelsByCase.has(caseId)) {
+        this.indexRelsByCase.set(caseId, new Set());
+      }
+      this.indexRelsByCase.get(caseId).add(id);
+    }
+
+    return updated;
+  }
+
   getRelationship(id) {
     return this.relationships.get(id) || null;
   }

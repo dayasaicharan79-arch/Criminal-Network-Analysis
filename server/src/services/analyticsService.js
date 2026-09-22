@@ -288,8 +288,22 @@ export class AnalyticsService {
   /**
    * Computes shortest path between two nodes using BFS.
    */
-  static findShortestPath(fromId, toId, caseId = null) {
-    const { nodes, links } = store.getGraph({ caseId });
+  static findShortestPath(arg1, arg2, arg3 = null, arg4 = null) {
+    let fromId, toId, caseId, nodes, links;
+    if (Array.isArray(arg1) && Array.isArray(arg2)) {
+      nodes = arg1;
+      links = arg2;
+      fromId = arg3;
+      toId = arg4;
+    } else {
+      fromId = arg1;
+      toId = arg2;
+      caseId = arg3;
+      const graph = store.getGraph({ caseId });
+      nodes = graph.nodes;
+      links = graph.links;
+    }
+
     const { adj } = AnalyticsService.buildAdjacency(nodes, links);
 
     if (!adj.has(fromId) || !adj.has(toId)) {

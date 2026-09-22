@@ -150,6 +150,9 @@ export class IngestionService {
     // 2. RELATIONSHIP INGESTION PIPELINE
     // -------------------------------------------------------------------------
     const relationshipsToCreate = [];
+    const relationshipsToUpdate = new Map(); // resolvedId -> mergedPayload
+    const inFlightRels = new Map(); // resolvedId -> relationship
+    let totalRelationshipsMerged = 0;
 
     for (let idx = 0; idx < relationships.length; idx++) {
       totalSubmitted++;
@@ -204,7 +207,59 @@ export class IngestionService {
         continue;
       }
 
-      relationshipsToCreate.push(normalized);
+      // 2c. Relationship Resolution (Deduplication & Metadata Merging)
+      const relResolution = this.resolution.resolveRelationship(normalized, inFlightRels, caseId);
+
+      if (relResolution.action === 'MERGED') {
+        totalRelationshipsMerged++;
+        resolutionLog.push({
+          action: 'MERGED',
+          type: 'relationship',
+          incomingId: normalized.id,
+          resolvedId: relResolution.resolvedId,
+          matchType: relResolution.matchType,
+          label: `${normalized.source} -> ${normalized.target} (${normalized.type})`,
+        });
+
+        const inFlightTarget = inFlightRels.get(relResolution.resolvedId);
+        if (inFlightTarget) {
+          inFlightTarget.confidence = Math.max(inFlightTarget.confidence || 0, normalized.confidence || 0);
+          inFlightTarget.caseIds = [...new Set([...(inFlightTarget.caseIds || []), ...(normalized.caseIds || [])])];
+          inFlightTarget.evidenceIds = [...new Set([...(inFlightTarget.evidenceIds || []), ...(normalized.evidenceIds || [])])];
+          inFlightTarget.metadata = {
+            ...(inFlightTarget.metadata || {}),
+            ...(normalized.metadata || {}),
+            occurrenceCount: (inFlightTarget.metadata?.occurrenceCount || 1) + 1,
+            lastActivityTimestamp: normalized.timestamp || inFlightTarget.timestamp,
+          };
+        } else {
+          const existingUpdates = relationshipsToUpdate.get(relResolution.resolvedId) || {};
+          relationshipsToUpdate.set(relResolution.resolvedId, {
+            confidence: Math.max(existingUpdates.confidence || 0, normalized.confidence || 0),
+            caseIds: [...new Set([...(existingUpdates.caseIds || []), ...(normalized.caseIds || [])])],
+            evidenceIds: [...new Set([...(existingUpdates.evidenceIds || []), ...(normalized.evidenceIds || [])])],
+            timestamp: normalized.timestamp || existingUpdates.timestamp,
+            metadata: {
+              ...(existingUpdates.metadata || {}),
+              ...(normalized.metadata || {}),
+              occurrenceCount: (existingUpdates.metadata?.occurrenceCount || 0) + 1,
+              lastActivityTimestamp: normalized.timestamp || existingUpdates.timestamp,
+            },
+          });
+        }
+      } else {
+        inFlightRels.set(normalized.id, normalized);
+        relationshipsToCreate.push(normalized);
+        resolutionLog.push({
+          action: 'CREATED',
+          type: 'relationship',
+          incomingId: normalized.id,
+          resolvedId: normalized.id,
+          matchType: null,
+          label: `${normalized.source} -> ${normalized.target} (${normalized.type})`,
+        });
+      }
+
       totalAccepted++;
     }
 
@@ -304,8 +359,20 @@ export class IngestionService {
       }
 
       // Translate referenced entityIds
+      if (raw.entityId && (!raw.entityIds || raw.entityIds.length === 0)) {
+        raw.entityIds = [raw.entityId];
+      }
       if (Array.isArray(raw.entityIds)) {
-        raw.entityIds = raw.entityIds.map(eId => idMap.get(eId) || eId);
+        raw.entityIds = raw.entityIds.map(eId => {
+          if (idMap.has(eId)) return idMap.get(eId);
+          const storeEnt = this.store.getEntity(eId);
+          if (storeEnt) return storeEnt.id;
+          const searchMatches = this.store.search(eId, { limit: 1 });
+          if (searchMatches.length > 0 && searchMatches[0].label.toLowerCase() === String(eId).toLowerCase()) {
+            return searchMatches[0].id;
+          }
+          return eId;
+        });
       }
 
       const normalized = normalizeEvidence(raw);
@@ -344,6 +411,11 @@ export class IngestionService {
         this.store.addRelationship(rel);
       }
 
+      // Apply merged updates to existing relationships
+      for (const [resId, updates] of relationshipsToUpdate.entries()) {
+        this.store.updateRelationship(resId, updates);
+      }
+
       // Create locations
       for (const loc of locationsToCreate) {
         this.store.addLocation(loc);
@@ -370,6 +442,7 @@ export class IngestionService {
       entitiesCreated: entitiesToCreate.length,
       entitiesMerged: entitiesToUpdate.size,
       relationshipsCreated: relationshipsToCreate.length,
+      relationshipsMerged: totalRelationshipsMerged,
       locationsCreated: locationsToCreate.length,
       eventsCreated: eventsToCreate.length,
       evidenceCreated: evidenceToCreate.length,

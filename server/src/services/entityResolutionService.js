@@ -202,6 +202,99 @@ export class EntityResolutionService {
     const attrs = entity.attributes || {};
     return attrs.plate || attrs.registrationNumber || attrs.vehicleNumber || null;
   }
+
+  /**
+   * Computes deterministic canonical key for relationship deduplication.
+   * Undirected types sort source and target alphabetically to guarantee canonical key.
+   */
+  computeRelationshipKey(rel, defaultCaseId = null) {
+    const UNDIRECTED_TYPES = new Set([
+      'KNOWS',
+      'COMMUNICATED_WITH',
+      'ASSOCIATED_WITH',
+      'CONNECTED_TO',
+      'RELATED_TO',
+      'TRANSACTED_WITH',
+      'SAME_SOURCE_IMAGE',
+      'POTENTIAL_RELATIONSHIP',
+    ]);
+
+    const isUndirected = UNDIRECTED_TYPES.has(rel.type);
+    const src = String(rel.source || '').trim();
+    const tgt = String(rel.target || '').trim();
+    const type = String(rel.type || '').trim();
+    const cId = (rel.caseIds && rel.caseIds.length > 0) ? rel.caseIds[0] : (defaultCaseId || 'GLOBAL');
+
+    if (isUndirected) {
+      const first = src < tgt ? src : tgt;
+      const second = src < tgt ? tgt : src;
+      return `${cId}::${first}::${second}::${type}`;
+    }
+    return `${cId}::${src}::${tgt}::${type}`;
+  }
+
+  /**
+   * Resolves an incoming normalized relationship against existing store records
+   * and in-flight batch candidates to eliminate duplicate parallel edges.
+   */
+  resolveRelationship(rel, inFlightBatch = new Map(), defaultCaseId = null) {
+    const relKey = this.computeRelationshipKey(rel, defaultCaseId);
+
+    // 1. Check in-flight batch
+    for (const [batchId, batchRel] of inFlightBatch.entries()) {
+      if (batchRel.id === rel.id) {
+        return {
+          action: 'MERGED',
+          resolvedId: batchRel.id,
+          matchType: 'BATCH_DUPLICATE_ID',
+          matchedRecord: batchRel,
+        };
+      }
+
+      if (this.computeRelationshipKey(batchRel, defaultCaseId) === relKey) {
+        return {
+          action: 'MERGED',
+          resolvedId: batchRel.id,
+          matchType: 'BATCH_CANONICAL_LINK',
+          matchedRecord: batchRel,
+        };
+      }
+    }
+
+    // 2. Check store for exact ID
+    if (rel.id) {
+      const existing = this.store.getRelationship(rel.id);
+      if (existing) {
+        return {
+          action: 'MERGED',
+          resolvedId: existing.id,
+          matchType: 'EXACT_ID',
+          matchedRecord: existing,
+        };
+      }
+    }
+
+    // 3. Check store for canonical link (source or target index lookup)
+    const existingRels = this.store.getRelationshipsByEntity(rel.source);
+    for (const er of existingRels) {
+      if (this.computeRelationshipKey(er, defaultCaseId) === relKey) {
+        return {
+          action: 'MERGED',
+          resolvedId: er.id,
+          matchType: 'STORE_CANONICAL_LINK',
+          matchedRecord: er,
+        };
+      }
+    }
+
+    // 4. Brand new relationship
+    return {
+      action: 'CREATED',
+      resolvedId: rel.id,
+      matchType: null,
+      matchedRecord: null,
+    };
+  }
 }
 
 export const entityResolutionService = new EntityResolutionService();

@@ -18,9 +18,15 @@ import {
   RotateCcw,
   UploadCloud,
   FileCode,
+  FileSpreadsheet,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
+import {
+  parseCSV,
+  suggestFieldMappings,
+  buildIngestionPayloadFromMapping,
+} from '../../utils/fileParsers.js';
 
 const SAMPLE_BULK_JSON = `[
   {
@@ -57,11 +63,17 @@ const SAMPLE_BULK_JSON = `[
   }
 ]`;
 
+const SAMPLE_BULK_CSV = `type,label,subType,phoneNumber,imei,city,latitude,longitude
+person,Vikram Rathore,Financial Operator,+91 98110 44219,,New Delhi,28.6506,77.2303
+suspect,Anil 'Courier' Mehra,Cash Carrier,+91 99201 55182,,Mumbai,18.9515,72.8315
+phone,+91 91234 56789,Burner Device,,864209040112340,,,
+location,Chandni Chowk Hawala Hub,Site,,,New Delhi,28.6506,77.2303`;
+
 export function BulkEntryForm() {
   const { activeCaseId, refreshInvestigationData } = useInvestigationStore();
 
   const [rawText, setRawText] = useState(SAMPLE_BULK_JSON);
-  const [format, setFormat] = useState('json'); // 'json' | 'csv_text'
+  const [format, setFormat] = useState('json'); // 'json' | 'csv'
   const [validating, setValidating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewResult, setPreviewResult] = useState(null);
@@ -74,7 +86,7 @@ export function BulkEntryForm() {
   };
 
   const handleLoadSample = () => {
-    setRawText(SAMPLE_BULK_JSON);
+    setRawText(format === 'csv' ? SAMPLE_BULK_CSV : SAMPLE_BULK_JSON);
     setPreviewResult(null);
     setStatusMessage(null);
   };
@@ -82,7 +94,24 @@ export function BulkEntryForm() {
   // Convert raw text to unified ingestion payload
   const parseBulkPayload = () => {
     if (!rawText.trim()) {
-      throw new Error('Please enter records in JSON array format');
+      throw new Error(`Please enter records in ${format === 'csv' ? 'CSV' : 'JSON array'} format`);
+    }
+
+    if (format === 'csv') {
+      const parsed = parseCSV(rawText);
+      if (!parsed.rows || parsed.rows.length === 0) {
+        throw new Error('CSV text does not contain any valid record rows');
+      }
+      const mapping = suggestFieldMappings(parsed.headers);
+      const payload = buildIngestionPayloadFromMapping({
+        rows: parsed.rows,
+        mapping,
+        caseId: activeCaseId,
+        filename: 'bulk_manual_entry.csv',
+      });
+      payload.source = 'manual';
+      payload.metadata.entryMethod = 'bulk_manual_csv';
+      return payload;
     }
 
     let parsed;
@@ -274,16 +303,45 @@ export function BulkEntryForm() {
         </div>
       )}
 
-      {/* Editor Area */}
+      {/* Format Toggle & Editor Area */}
       <div>
-        <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-          JSON Array of Investigation Records
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              type="button"
+              className={`btn ${format === 'json' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => {
+                setFormat('json');
+                if (!rawText.trim() || rawText === SAMPLE_BULK_CSV) setRawText(SAMPLE_BULK_JSON);
+              }}
+            >
+              <FileCode size={12} /> JSON Array
+            </button>
+            <button
+              type="button"
+              className={`btn ${format === 'csv' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => {
+                setFormat('csv');
+                if (!rawText.trim() || rawText === SAMPLE_BULK_JSON) setRawText(SAMPLE_BULK_CSV);
+              }}
+            >
+              <FileSpreadsheet size={12} /> Raw CSV Text
+            </button>
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {format === 'csv' ? 'Columns: type, label, subType, phoneNumber, imei, city, latitude, longitude' : 'Schema: Array of entity, relationship, or location objects'}
+          </span>
+        </div>
+
         <textarea
           rows={10}
           value={rawText}
           onChange={e => setRawText(e.target.value)}
-          placeholder='[ { "type": "person", "label": "John Doe", "attributes": { "phoneNumber": "+91..." } } ]'
+          placeholder={format === 'csv'
+            ? 'type,label,subType,phoneNumber,imei,city,latitude,longitude\nperson,Vikram Rathore,Financial Operator,+91 98110 44219,,New Delhi,28.6506,77.2303'
+            : '[ { "type": "person", "label": "John Doe", "attributes": { "phoneNumber": "+91..." } } ]'}
           style={{
             width: '100%',
             background: 'rgba(0,0,0,0.5)',
@@ -335,7 +393,7 @@ export function BulkEntryForm() {
           {/* Summary Metric Counters */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(6, 1fr)',
             gap: '10px',
             fontSize: '11px',
             fontFamily: 'var(--font-mono)',
@@ -345,7 +403,9 @@ export function BulkEntryForm() {
             <div>Submitted: <strong>{previewResult.summary.submitted}</strong></div>
             <div>Accepted: <strong style={{ color: 'var(--accent-emerald)' }}>{previewResult.summary.accepted}</strong></div>
             <div>Rejected: <strong style={{ color: previewResult.summary.rejected > 0 ? 'var(--accent-crimson)' : 'var(--text-muted)' }}>{previewResult.summary.rejected}</strong></div>
-            <div>Entities Merged: <strong style={{ color: 'var(--accent-cyan)' }}>{previewResult.summary.entitiesMerged}</strong></div>
+            <div>Entities Merged: <strong style={{ color: 'var(--accent-cyan)' }}>{previewResult.summary.entitiesMerged || 0}</strong></div>
+            <div>Rels Merged: <strong style={{ color: 'var(--accent-purple)' }}>{previewResult.summary.relationshipsMerged || 0}</strong></div>
+            <div>Evidence Items: <strong style={{ color: 'var(--accent-gold)' }}>{previewResult.summary.evidenceCreated || 0}</strong></div>
           </div>
 
           {/* Granular Rejections Breakdown */}
